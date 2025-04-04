@@ -1,4 +1,4 @@
-package com.sunlightsimulator
+package com.danekoenders.sunlightsimulator
 
 import android.os.Build
 import android.os.Bundle

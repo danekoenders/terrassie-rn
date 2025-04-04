@@ -2,6 +2,31 @@
   "expo": {
     "name": "sunlight-simulator",
     "slug": "sunlight-simulator",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsImpl": "mapbox",
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiZGFuZWtvZW5kZXJzIiwiYSI6ImNtOTJqcmpvODA0bDUya3NjZXQyZ2ptZHIifQ.4oy7RYy5sgtVPi27rUlZhg"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Sunlight Simulator to access your location."
+        }
+      ]
+    ],
+    "android": {
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "package": "com.danekoenders.sunlightsimulator"
+    },
+    "ios": {
+      "bundleIdentifier": "com.danekoenders.sunlightsimulator"
+    }
   }
 }

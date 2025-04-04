@@ -21,7 +21,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'sunlightsimulator'
+rootProject.name = 'sunlight-simulator'
 
 dependencyResolutionManagement {
   versionCatalogs {
