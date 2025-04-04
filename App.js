@@ -16,6 +16,7 @@ export default function App() {
     // Request location permissions and get initial location
     const getLocation = async () => {
       try {
+        console.log('Requesting location permissions...');
         const { status } = await requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           console.log('Permission to access location was denied');
@@ -23,7 +24,9 @@ export default function App() {
           return;
         }
 
+        console.log('Getting current position...');
         const position = await getCurrentPositionAsync({});
+        console.log('Position received:', position);
         setLocation([position.coords.longitude, position.coords.latitude]);
         setIsLoading(false);
       } catch (error) {

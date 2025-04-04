@@ -21,8 +21,12 @@ const MapScreen = ({ location }) => {
   const [showCenterPointer, setShowCenterPointer] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  
+  // Fallback to Amsterdam coordinates if location is not available
+  const effectiveLocation = location || [4.9041, 52.3676];
+  
   const [cameraProps, setCameraProps] = useState({
-    centerCoordinate: location,
+    centerCoordinate: effectiveLocation,
     zoomLevel: 17,
     pitch: 60,
     heading: -45,
@@ -45,8 +49,9 @@ const MapScreen = ({ location }) => {
   
   // Initialize map with user location
   useEffect(() => {
-    if (location && isMapReady) {
-      const coords = Array.isArray(location) ? location : [location.longitude, location.latitude];
+    if (effectiveLocation && isMapReady) {
+      console.log('Setting map location:', effectiveLocation);
+      const coords = Array.isArray(effectiveLocation) ? effectiveLocation : [effectiveLocation.longitude, effectiveLocation.latitude];
       setCameraProps(prev => ({
         ...prev,
         centerCoordinate: coords,
@@ -54,10 +59,11 @@ const MapScreen = ({ location }) => {
       }));
       setSelectedPoint(coords);
     }
-  }, [location, isMapReady]);
+  }, [effectiveLocation, isMapReady]);
   
   // Handle map load completion
   const onMapReady = () => {
+    console.log('Map is ready');
     setIsMapReady(true);
     onCenterChanged();
   };
@@ -162,7 +168,7 @@ const MapScreen = ({ location }) => {
         <MapboxGL.MapView
           ref={mapRef}
           style={styles.map}
-          styleURL="mapbox://styles/danekoenders/cm8824x5800b901qr2tt8e6pz"
+          styleURL="mapbox://styles/mapbox/streets-v12"
           onRegionDidChange={onCenterChanged}
           logoEnabled={false}
           pitchEnabled={true}
@@ -242,7 +248,7 @@ const MapScreen = ({ location }) => {
           <View style={styles.topContainer}>
             <SearchBar 
               onUpdateResults={updateSearchResults}
-              onFlyToUserLocation={() => flyToLocation(location, 18)}
+              onFlyToUserLocation={() => flyToLocation(effectiveLocation, 18)}
             />
             
             {showSearchResults && (
