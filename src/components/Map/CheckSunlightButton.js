@@ -16,6 +16,7 @@ const CheckSunlightButton = ({ onCheckSunlight }) => {
         onPress={onCheckSunlight}
         disabled={analyzing}
       >
+        <Text style={styles.buttonIcon}>{analyzing ? '⏳' : '☀️'}</Text>
         <Text style={styles.buttonText}>
           {analyzing ? 'Analyzing...' : 'Check Sunlight'}
         </Text>
@@ -35,12 +36,25 @@ const styles = StyleSheet.create({
   },
   checkButton: {
     ...Buttons.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 24,
+    ...Shadows.medium,
   },
   checkButtonDisabled: {
     backgroundColor: Colors.disabled,
   },
+  buttonIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
   buttonText: {
     ...Typography.button,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

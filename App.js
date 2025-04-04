@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { requestForegroundPermissionsAsync, getCurrentPositionAsync } from 'expo-location';
+import * as Location from 'expo-location';
 import MapboxGL from '@rnmapbox/maps';
 import { SunlightProvider } from './src/context/SunlightContext';
 import MapScreen from './src/components/Map/MapScreen';
-import * as Location from 'expo-location';
 
 // Set Mapbox access token
 MapboxGL.setAccessToken('pk.eyJ1IjoiZGFuZWtvZW5kZXJzIiwiYSI6ImNtODdvNzczZDA4dmcybHF1cnltZmVkbTQifQ.aiCVa0540JxdEivA-rlDTQ');
@@ -29,25 +28,6 @@ export default function App() {
         });
         setLocation([position.coords.longitude, position.coords.latitude]);
         setIsLoading(false);
-        
-        // Set up location updates
-        const locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 5000,
-            distanceInterval: 10,
-          },
-          (newPosition) => {
-            setLocation([newPosition.coords.longitude, newPosition.coords.latitude]);
-          }
-        );
-        
-        // Clean up subscription when component unmounts
-        return () => {
-          if (locationSubscription) {
-            locationSubscription.remove();
-          }
-        };
       } catch (error) {
         setError(error.message);
         setIsLoading(false);
@@ -69,7 +49,7 @@ export default function App() {
           <Text style={styles.errorSubtext}>Using default location (Amsterdam)</Text>
         </View>
       ) : (
-        <MapScreen location={location} />
+        <MapScreen initialLocation={location} />
       )}
     </SunlightProvider>
   );

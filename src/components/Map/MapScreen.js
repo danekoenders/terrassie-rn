@@ -14,7 +14,7 @@ import { ExitButton } from "../Analysis/ExitButton";
 import { TimeSlider } from "../Analysis/TimeSlider";
 import { AnalysisPanel } from "../Analysis/AnalysisPanel";
 
-const MapScreen = ({ location }) => {
+const MapScreen = ({ initialLocation }) => {
   const mapRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapLoading, setMapLoading] = useState(true);
@@ -23,10 +23,12 @@ const MapScreen = ({ location }) => {
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
+  const [location, setLocation] = useState(initialLocation);
   // Add a flag to prevent automatic location updates from overriding manual actions
   const [isManuallyNavigating, setIsManuallyNavigating] = useState(false);
   // Use refs for values that shouldn't trigger re-renders
   const selectedPointRef = useRef(null);
+  const [showZoomMessage, setShowZoomMessage] = useState(false);
 
   // Fallback to Amsterdam coordinates if location is not available
   const effectiveLocation = location || [4.9041, 52.3676];
@@ -45,6 +47,7 @@ const MapScreen = ({ location }) => {
     selectedPoint,
     setSelectedPoint,
     rayCoords,
+    raySegments,
     blockerFeature,
     intersectionPoint,
     isInShadow,
@@ -93,11 +96,18 @@ const MapScreen = ({ location }) => {
     }
   }, [memoizedEffectiveLocation, isMapReady, isManuallyNavigating, setSelectedPoint]);
 
+  // Use a fixed max zoom level since getMaxZoomLevel is not available
+  const MAX_ZOOM = 19;
+
+  // Add state for current zoom level to directly reference in rendering
+  const [currentZoom, setCurrentZoom] = useState(12);
+
   // Handle map load completion
   const onMapReady = useCallback(() => {
     setIsMapReady(true);
-    // Add a slight delay to ensure all map resources are loaded
-    setTimeout(() => setMapLoading(false), 500);
+    
+    // Don't delay hiding the loading indicator - hide it immediately
+    setMapLoading(false);
   }, []);
 
   // Get center coordinates of the map view - memoize to prevent unnecessary recreations
@@ -106,6 +116,13 @@ const MapScreen = ({ location }) => {
 
     try {
       const center = await mapRef.current.getCenter();
+      const zoom = await mapRef.current.getZoom();
+      
+      // Set current zoom for rendering
+      setCurrentZoom(zoom);
+      
+      // Debug logging
+      console.log(`Camera updated: zoom=${zoom.toFixed(2)}`);
       
       // Only update selectedPoint if it actually changed significantly
       if (!selectedPointRef.current || 
@@ -120,16 +137,31 @@ const MapScreen = ({ location }) => {
         exitSunlightAnalysis();
       }
 
-      // Get current zoom level to determine if we should show the center pointer
-      const zoom = await mapRef.current.getZoom();
-      setShowCenterPointer(zoom >= 17);
+      // Determine if we should show the center pointer
+      // Use just the zoom threshold of 16 or if we're close to max zoom
+      const isHighZoom = zoom >= 16 || zoom >= (MAX_ZOOM - 1);
+      const newShowCenterPointer = isHighZoom;
+      
+      // If we just crossed the threshold, show zoom message
+      if (newShowCenterPointer && !showCenterPointer && !isAnalysisMode) {
+        setShowZoomMessage(true);
+        // Hide the message after 3 seconds
+        setTimeout(() => {
+          setShowZoomMessage(false);
+        }, 3000);
+      }
+      
+      // Force update if different
+      if (newShowCenterPointer !== showCenterPointer) {
+        setShowCenterPointer(newShowCenterPointer);
+      }
     } catch (error) {
-      // Error handling
+      console.error("Error in onCenterChanged:", error);
     }
-  }, [isMapReady, isCameraSystemMove, isAnalysisMode, setSelectedPoint, exitSunlightAnalysis]);
+  }, [isMapReady, isCameraSystemMove, isAnalysisMode, setSelectedPoint, exitSunlightAnalysis, showCenterPointer]);
 
   // Fly to any location with animation
-  const flyToLocation = useCallback((coords) => {
+  const flyToLocation = useCallback(async (coords) => {
     if (!isMapReady || !mapRef.current) {
       return;
     }
@@ -142,12 +174,16 @@ const MapScreen = ({ location }) => {
         ? coords
         : [coords.longitude, coords.latitude];
       
+      // Get current zoom level
+      const currentZoom = await mapRef.current.getZoom();
+      
       // Use functional update to avoid stale state
       setCameraProps(prev => ({
         ...prev,
         centerCoordinate: targetCoords,
         animationDuration: 1000,
-        zoomLevel: 16,
+        // Set zoom to at least 16 to help users get to the analysis UI faster
+        zoomLevel: Math.max(currentZoom, 16),
         animationMode: 'flyTo',
       }));
       
@@ -237,46 +273,50 @@ const MapScreen = ({ location }) => {
   useEffect(() => {
     let locationSubscription;
     
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          return;
-        }
-        
-        locationSubscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Balanced,
-            distanceInterval: 5,
-            timeInterval: 3000,
-          },
-          (newPosition) => {
-            if (newPosition && newPosition.coords) {
-              const newLocation = [newPosition.coords.longitude, newPosition.coords.latitude];
-              if (!userLocation || 
-                  Math.abs(userLocation[0] - newLocation[0]) > 0.00001 || 
-                  Math.abs(userLocation[1] - newLocation[1]) > 0.00001) {
+    // Only set up location tracking if we're not already manually navigating
+    if (!isManuallyNavigating) {
+      (async () => {
+        try {
+          // Check if permissions were already granted
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status !== 'granted') {
+            // We don't need to request permissions here - App.js already did that
+            return;
+          }
+          
+          locationSubscription = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.Balanced,
+              distanceInterval: 5,
+              timeInterval: 3000,
+            },
+            (newPosition) => {
+              if (newPosition && newPosition.coords) {
+                const newLocation = [newPosition.coords.longitude, newPosition.coords.latitude];
+                
+                // Update both our location state and userLocation state
+                setLocation(newLocation);
                 setUserLocation(newLocation);
               }
             }
-          }
-        );
-      } catch (error) {
-        // Handle error
-      }
-    })();
+          );
+        } catch (error) {
+          // Handle error silently
+        }
+      })();
+    }
     
     return () => {
       if (locationSubscription) {
         locationSubscription.remove();
       }
     };
-  }, [userLocation]);
+  }, [isManuallyNavigating]); // Only depends on isManuallyNavigating to avoid re-creating when userLocation changes
 
   // Direct function to handle location button press
   const handleLocationButtonPress = useCallback(() => {
-    // First try to use the userLocation if available
-    const targetLocation = userLocation || location || [4.9041, 52.3676]; // Fallback to Amsterdam
+    // We now prioritize the location state since it's updated from both initial and watch position
+    const targetLocation = location || userLocation || [4.9041, 52.3676]; // Fallback to Amsterdam
     
     // Apply a small jitter to ensure camera animates even if at same location
     const jitter = 0.00001;
@@ -294,9 +334,9 @@ const MapScreen = ({ location }) => {
       };
     }
     
-    // Set camera to user location
+    // Set camera to user location with a higher zoom level for better visibility
     flyToLocation(finalLocation);
-  }, [userLocation, location, flyToLocation]);
+  }, [location, userLocation, flyToLocation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -306,6 +346,7 @@ const MapScreen = ({ location }) => {
           style={styles.map}
           styleURL="mapbox://styles/danekoenders/cm8824x5800b901qr2tt8e6pz"
           onMapIdle={onCenterChanged}
+          onCameraChanged={onCenterChanged}
           logoEnabled={false}
           pitchEnabled={true}
           onDidFinishLoadingMap={onMapReady}
@@ -349,6 +390,29 @@ const MapScreen = ({ location }) => {
                     : "rgba(255,215,0,0.8)",
                   lineWidth: 4,
                   lineDasharray: isInShadow ? [1, 1] : [1, 0],
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          )}
+
+          {/* 3D Ray Segments */}
+          {raySegments && raySegments.length > 0 && (
+            <MapboxGL.ShapeSource
+              id="raySegmentsSource"
+              shape={{
+                type: "FeatureCollection",
+                features: raySegments,
+              }}
+            >
+              <MapboxGL.FillExtrusionLayer
+                id="raySegmentsLayer"
+                style={{
+                  fillExtrusionColor: isInShadow
+                    ? "rgba(255,0,0,0.7)"
+                    : "rgba(255,215,0,0.7)",
+                  fillExtrusionOpacity: 0.7,
+                  fillExtrusionBase: ["get", "base"],
+                  fillExtrusionHeight: ["get", "height"],
                 }}
               />
             </MapboxGL.ShapeSource>
@@ -398,6 +462,15 @@ const MapScreen = ({ location }) => {
           </View>
         )}
 
+        {/* Zoom level message */}
+        {showZoomMessage && (
+          <View style={styles.zoomMessageContainer}>
+            <Text style={styles.zoomMessageText}>
+              You can now check sunlight at this location!
+            </Text>
+          </View>
+        )}
+
         {/* UI Overlays */}
 
         {/* Top search bar and location button */}
@@ -438,7 +511,7 @@ const MapScreen = ({ location }) => {
         )}
 
         {/* Check Sunlight button */}
-        {showCenterPointer && !isAnalysisMode && (
+        {(showCenterPointer || currentZoom >= 16 || Math.abs(currentZoom - MAX_ZOOM) < 0.5) && !isAnalysisMode && (
           <CheckSunlightButton onCheckSunlight={handleCheckSunlight} />
         )}
 
@@ -452,9 +525,15 @@ const MapScreen = ({ location }) => {
           ) : (
             <View style={styles.minimalPanel}>
               <View style={styles.panelHandle} />
-              <Text style={styles.panelText}>
-                Move map to check sunlight on terraces
-              </Text>
+              {showCenterPointer || currentZoom >= 16 || Math.abs(currentZoom - MAX_ZOOM) < 0.5 ? (
+                <Text style={styles.panelText}>
+                  Place the pin over a terrace and tap "Check Sunlight"
+                </Text>
+              ) : (
+                <Text style={styles.panelText}>
+                  Zoom in closer to check sunlight on terraces
+                </Text>
+              )}
             </View>
           )}
         </View>
@@ -546,6 +625,24 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: Colors.gray,
+  },
+  zoomMessageContainer: {
+    position: 'absolute',
+    top: 120,
+    left: 16,
+    right: 16,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.medium,
+  },
+  zoomMessageText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

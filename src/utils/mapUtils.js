@@ -37,16 +37,35 @@ export const searchMapboxLocations = async (query) => {
  * @param {Array} layers - Array of layer ids to query
  * @returns {Promise<Array>} Promise resolving to array of features
  */
-export const getMapFeaturesAround = async (mapRef, center, layers = ['building', '3d-buildings']) => {
+export const getMapFeaturesAround = async (mapRef, center, layers = ['building-extrusion']) => {
   if (!mapRef || !center) {
     return [];
   }
   
   try {
-    // Query rendered features in the viewport
-    const features = await mapRef.queryRenderedFeaturesInRect([], null, layers);
+    // Get the current zoom level for proper scaling
+    const zoom = await mapRef.getZoom();
     
-    // The error is likely happening because the result isn't directly iterable
+    // Convert center to pixel coordinates
+    const centerPixel = await mapRef.toScreenLocation(center);
+    
+    // Calculate appropriate search radius based on zoom
+    // Higher zoom = smaller radius in pixels
+    const radiusInPixels = Math.min(500, 1000 / Math.pow(1.2, zoom - 10));
+    
+    // Define pixel rectangle for querying
+    const left = centerPixel.x - radiusInPixels;
+    const top = centerPixel.y - radiusInPixels;
+    const right = centerPixel.x + radiusInPixels;
+    const bottom = centerPixel.y + radiusInPixels;
+    
+    // Query rendered features in the rectangle
+    const features = await mapRef.queryRenderedFeaturesInRect(
+      [[left, top], [right, bottom]],
+      null,
+      layers
+    );
+    
     // Ensure we're returning a proper array
     if (features && typeof features.forEach === 'function') {
       // It's already an array-like object with forEach, so we can convert it to an array
@@ -94,23 +113,4 @@ export const flyToLocation = (mapRef, coords, duration = 1000, zoom = 16, bearin
     bearing,
     pitch
   );
-};
-
-/**
- * Get user's current geographical position
- * 
- * @returns {Promise<Array>} Promise resolving to [longitude, latitude] coordinates
- */
-export const getCurrentPosition = () => {
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve([position.coords.longitude, position.coords.latitude]);
-      },
-      (error) => {
-        reject(error);
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-    );
-  });
 }; 

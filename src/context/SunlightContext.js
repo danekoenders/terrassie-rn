@@ -4,7 +4,10 @@ import {
   calculateSunriseSunset, 
   calculateRayCoordinates, 
   formatTimeFromDecimal,
-  checkShadow
+  checkShadow,
+  checkShadowWith3DRay,
+  createRay3DSegments,
+  calculate3DDestinationPoint
 } from '../utils/sunCalculations';
 import { getMapFeaturesAround } from '../utils/mapUtils';
 
@@ -35,6 +38,7 @@ export const SunlightProvider = ({ children }) => {
   const [selectedPoint, setSelectedPoint] = useState(null);
   const [isInShadow, setIsInShadow] = useState(null);
   const [rayCoords, setRayCoords] = useState(null);
+  const [raySegments, setRaySegments] = useState(null);
   const [blockerFeature, setBlockerFeature] = useState(null);
   const [intersectionPoint, setIntersectionPoint] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -107,7 +111,7 @@ export const SunlightProvider = ({ children }) => {
   };
   
   /**
-   * Check if the selected point is in shadow
+   * Check if the selected point is in shadow using enhanced 3D ray tracing
    * @param {Object} mapRef - Reference to the map instance
    * @param {boolean} skipAnalyzing - Whether to skip setting analyzing state (for auto-updates)
    */
@@ -119,16 +123,112 @@ export const SunlightProvider = ({ children }) => {
     if (!skipAnalyzing) {
       setAnalyzing(true);
       setIntersectionPoint(null);
+      setRaySegments(null);
     }
     
     try {
       // Get map features to check for shadows
+      console.log("Getting map features around", selectedPoint);
       const features = await getMapFeaturesAround(mapRef, selectedPoint);
+      console.log(`Found ${features ? features.length : 0} building features`);
       
       if (!features || (Array.isArray(features) && features.length === 0)) {
+        // No features case
+        console.log("No building features found, point is in sunlight");
         setIsInShadow(false);
         setBlockerFeature(null);
         setIntersectionPoint(null);
+        
+        // Create a simple ray without intersections
+        if (sunAltitudeDeg > 0) {
+          const rayEnd = calculate3DDestinationPoint(
+            selectedPoint, 
+            0.5, // 500m ray
+            bearingFromNorth, 
+            sunAltitudeDeg
+          );
+          
+          const segments = createRay3DSegments(
+            selectedPoint,
+            rayEnd.position,
+            0,
+            rayEnd.elevation
+          );
+          
+          setRaySegments(segments);
+          
+          // Update standard ray visualization for backward compatibility
+          const rays = calculateRayCoordinates(
+            selectedPoint, 
+            bearingFromNorth, 
+            null, 
+            false
+          );
+          setRayCoords(rays);
+        } else {
+          // Night time - no rays
+          console.log("Sun below horizon, no rays to visualize");
+          setRaySegments(null);
+          setRayCoords(null);
+        }
+        
+        return;
+      }
+      
+      // Perform 3D ray tracing shadow check
+      console.log("Performing 3D ray tracing with", features.length, "buildings");
+      const shadowResult = checkShadowWith3DRay(
+        selectedPoint, 
+        bearingFromNorth, 
+        sunAltitudeDeg, 
+        features
+      );
+      
+      // Update state with results
+      console.log("Shadow check result:", shadowResult.isInShadow ? "in shadow" : "in sunlight");
+      setIsInShadow(shadowResult.isInShadow);
+      setBlockerFeature(shadowResult.blockerFeature);
+      setIntersectionPoint(shadowResult.intersectionPoint);
+      setRaySegments(shadowResult.raySegments);
+      
+      // Update standard ray visualization for backward compatibility
+      const rays = calculateRayCoordinates(
+        selectedPoint, 
+        bearingFromNorth, 
+        shadowResult.intersectionPoint, 
+        shadowResult.isInShadow
+      );
+      setRayCoords(rays);
+    } catch (error) {
+      console.error("Error checking sunlight with 3D ray tracing:", error);
+      
+      // Fall back to standard shadow check on error
+      try {
+        console.log("Falling back to standard shadow check");
+        // Fallback to standard shadow check
+        const basicShadowResult = checkShadow(selectedPoint, bearingFromNorth, sunAltitudeDeg, features);
+        
+        setIsInShadow(basicShadowResult.isInShadow);
+        setBlockerFeature(basicShadowResult.blockerFeature);
+        setIntersectionPoint(basicShadowResult.intersectionPoint);
+        
+        // Update ray visualization
+        const rays = calculateRayCoordinates(
+          selectedPoint, 
+          bearingFromNorth, 
+          basicShadowResult.intersectionPoint, 
+          basicShadowResult.isInShadow
+        );
+        setRayCoords(rays);
+        setRaySegments(null);
+        console.log("Standard shadow check complete");
+      } catch (fallbackError) {
+        console.error("Fallback shadow check also failed:", fallbackError);
+        // Set safe default values in case of error
+        setIsInShadow(false);
+        setBlockerFeature(null);
+        setIntersectionPoint(null);
+        setRaySegments(null);
         
         // Update ray visualization without intersection point
         const rays = calculateRayCoordinates(
@@ -138,39 +238,8 @@ export const SunlightProvider = ({ children }) => {
           false
         );
         setRayCoords(rays);
-        return;
+        console.log("All shadow checks failed, defaulting to sunlight");
       }
-      
-      // Check shadow using utility function
-      const shadowResult = checkShadow(selectedPoint, bearingFromNorth, sunAltitudeDeg, features);
-      
-      setIsInShadow(shadowResult.isInShadow);
-      setBlockerFeature(shadowResult.blockerFeature);
-      setIntersectionPoint(shadowResult.intersectionPoint);
-      
-      // Update ray visualization with intersection point if found
-      const rays = calculateRayCoordinates(
-        selectedPoint, 
-        bearingFromNorth, 
-        shadowResult.intersectionPoint, 
-        shadowResult.isInShadow
-      );
-      setRayCoords(rays);
-    } catch (error) {
-      console.error("Error checking sunlight:", error);
-      // Set safe default values in case of error
-      setIsInShadow(false);
-      setBlockerFeature(null);
-      setIntersectionPoint(null);
-      
-      // Update ray visualization without intersection point
-      const rays = calculateRayCoordinates(
-        selectedPoint, 
-        bearingFromNorth, 
-        null, 
-        false
-      );
-      setRayCoords(rays);
     } finally {
       if (!skipAnalyzing) {
         setAnalyzing(false);
@@ -224,6 +293,7 @@ export const SunlightProvider = ({ children }) => {
    */
   const exitSunlightAnalysis = () => {
     setIsAnalysisMode(false);
+    setRaySegments(null);
     
     // Reset to current time
     const now = new Date();
@@ -259,6 +329,7 @@ export const SunlightProvider = ({ children }) => {
     setSelectedPoint,
     isInShadow,
     rayCoords,
+    raySegments,
     blockerFeature,
     intersectionPoint,
     analyzing,
@@ -270,10 +341,9 @@ export const SunlightProvider = ({ children }) => {
     checkSunlightForPoint,
     handleTimeChange,
     startSunlightAnalysis,
-    exitSunlightAnalysis,
-    formatTimeFromDecimal,
+    exitSunlightAnalysis
   };
-  
+
   return (
     <SunlightContext.Provider value={value}>
       {children}
