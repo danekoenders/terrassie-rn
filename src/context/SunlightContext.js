@@ -88,9 +88,15 @@ export const SunlightProvider = ({ children }) => {
     setBearingFromNorth(bearing);
     setSunAltitudeDeg(altitudeDeg);
     
-    // Calculate ray coordinates for visualization
-    const rays = calculateRayCoordinates(selectedPoint, bearing, intersectionPoint, isInShadow);
-    setRayCoords(rays);
+    // Only calculate ray coordinates if we're in analysis mode
+    // This ensures rays are only shown from the selected analysis point
+    if (isAnalysisMode) {
+      const rays = calculateRayCoordinates(selectedPoint, bearing, intersectionPoint, isInShadow);
+      setRayCoords(rays);
+    } else {
+      // Clear any existing rays when not in analysis mode
+      setRayCoords(null);
+    }
   };
   
   /**
@@ -157,14 +163,18 @@ export const SunlightProvider = ({ children }) => {
           
           setRaySegments(segments);
           
-          // Update standard ray visualization for backward compatibility
-          const rays = calculateRayCoordinates(
-            selectedPoint, 
-            bearingFromNorth, 
-            null, 
-            false
-          );
-          setRayCoords(rays);
+          // Only update standard ray visualization when in analysis mode
+          if (isAnalysisMode) {
+            const rays = calculateRayCoordinates(
+              selectedPoint, 
+              bearingFromNorth, 
+              null, 
+              false
+            );
+            setRayCoords(rays);
+          } else {
+            setRayCoords(null);
+          }
         } else {
           // Night time - no rays
           console.log("Sun below horizon, no rays to visualize");
@@ -191,14 +201,18 @@ export const SunlightProvider = ({ children }) => {
       setIntersectionPoint(shadowResult.intersectionPoint);
       setRaySegments(shadowResult.raySegments);
       
-      // Update standard ray visualization for backward compatibility
-      const rays = calculateRayCoordinates(
-        selectedPoint, 
-        bearingFromNorth, 
-        shadowResult.intersectionPoint, 
-        shadowResult.isInShadow
-      );
-      setRayCoords(rays);
+      // Only update standard ray visualization when in analysis mode
+      if (isAnalysisMode) {
+        const rays = calculateRayCoordinates(
+          selectedPoint, 
+          bearingFromNorth, 
+          shadowResult.intersectionPoint, 
+          shadowResult.isInShadow
+        );
+        setRayCoords(rays);
+      } else {
+        setRayCoords(null);
+      }
     } catch (error) {
       console.error("Error checking sunlight with 3D ray tracing:", error);
       
@@ -212,14 +226,18 @@ export const SunlightProvider = ({ children }) => {
         setBlockerFeature(basicShadowResult.blockerFeature);
         setIntersectionPoint(basicShadowResult.intersectionPoint);
         
-        // Update ray visualization
-        const rays = calculateRayCoordinates(
-          selectedPoint, 
-          bearingFromNorth, 
-          basicShadowResult.intersectionPoint, 
-          basicShadowResult.isInShadow
-        );
-        setRayCoords(rays);
+        // Update ray visualization only if in analysis mode
+        if (isAnalysisMode) {
+          const rays = calculateRayCoordinates(
+            selectedPoint, 
+            bearingFromNorth, 
+            basicShadowResult.intersectionPoint, 
+            basicShadowResult.isInShadow
+          );
+          setRayCoords(rays);
+        } else {
+          setRayCoords(null);
+        }
         setRaySegments(null);
         console.log("Standard shadow check complete");
       } catch (fallbackError) {
@@ -230,14 +248,18 @@ export const SunlightProvider = ({ children }) => {
         setIntersectionPoint(null);
         setRaySegments(null);
         
-        // Update ray visualization without intersection point
-        const rays = calculateRayCoordinates(
-          selectedPoint, 
-          bearingFromNorth, 
-          null, 
-          false
-        );
-        setRayCoords(rays);
+        // Update ray visualization without intersection point only if in analysis mode
+        if (isAnalysisMode) {
+          const rays = calculateRayCoordinates(
+            selectedPoint, 
+            bearingFromNorth, 
+            null, 
+            false
+          );
+          setRayCoords(rays);
+        } else {
+          setRayCoords(null);
+        }
         console.log("All shadow checks failed, defaulting to sunlight");
       }
     } finally {
@@ -289,11 +311,16 @@ export const SunlightProvider = ({ children }) => {
   };
   
   /**
-   * Exit sunlight analysis mode
+   * Exit sunlight analysis mode and clear all visualization elements
    */
   const exitSunlightAnalysis = () => {
     setIsAnalysisMode(false);
+    
+    // Clear all visualizations
     setRaySegments(null);
+    setRayCoords(null);
+    setBlockerFeature(null);
+    setIntersectionPoint(null);
     
     // Reset to current time
     const now = new Date();
@@ -341,7 +368,8 @@ export const SunlightProvider = ({ children }) => {
     checkSunlightForPoint,
     handleTimeChange,
     startSunlightAnalysis,
-    exitSunlightAnalysis
+    exitSunlightAnalysis,
+    formatTimeFromDecimal,
   };
 
   return (

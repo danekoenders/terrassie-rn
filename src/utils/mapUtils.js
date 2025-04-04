@@ -46,22 +46,33 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building-e
     // Get the current zoom level for proper scaling
     const zoom = await mapRef.getZoom();
     
-    // Convert center to pixel coordinates
-    const centerPixel = await mapRef.toScreenLocation(center);
+    // Calculate bounding box around center point
+    // We'll use a distance that varies based on zoom level
+    const distance = 50 / Math.pow(2, zoom - 10); // meters, scaled by zoom
     
-    // Calculate appropriate search radius based on zoom
-    // Higher zoom = smaller radius in pixels
-    const radiusInPixels = Math.min(500, 1000 / Math.pow(1.2, zoom - 10));
+    // Use a simple approach with a bounding box
+    const [lng, lat] = center;
     
-    // Define pixel rectangle for querying
-    const left = centerPixel.x - radiusInPixels;
-    const top = centerPixel.y - radiusInPixels;
-    const right = centerPixel.x + radiusInPixels;
-    const bottom = centerPixel.y + radiusInPixels;
+    // Approximately convert meters to degrees
+    // This is simplified and works best near the equator
+    const latMeterInDegrees = 1 / 111000; // 1 meter in degrees latitude
+    const lngMeterInDegrees = 1 / (111000 * Math.cos((lat * Math.PI) / 180)); // 1 meter in degrees longitude
     
-    // Query rendered features in the rectangle
+    const latDistance = distance * latMeterInDegrees;
+    const lngDistance = distance * lngMeterInDegrees;
+    
+    // Create the bounding box in format [top, right, bottom, left] as expected by Mapbox
+    const bbox = [
+      lat + latDistance,  // top (max lat)
+      lng + lngDistance,  // right (max lng)
+      lat - latDistance,  // bottom (min lat)
+      lng - lngDistance   // left (min lng)
+    ];
+    
+    // Query features within the bounding box - pass the array directly
+    console.log("Querying with bbox:", bbox);
     const features = await mapRef.queryRenderedFeaturesInRect(
-      [[left, top], [right, bottom]],
+      bbox,
       null,
       layers
     );

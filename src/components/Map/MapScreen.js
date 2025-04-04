@@ -121,9 +121,6 @@ const MapScreen = ({ initialLocation }) => {
       // Set current zoom for rendering
       setCurrentZoom(zoom);
       
-      // Debug logging
-      console.log(`Camera updated: zoom=${zoom.toFixed(2)}`);
-      
       // Only update selectedPoint if it actually changed significantly
       if (!selectedPointRef.current || 
           Math.abs(selectedPointRef.current[0] - center[0]) > 0.0001 || 
@@ -372,8 +369,8 @@ const MapScreen = ({ initialLocation }) => {
             }}
           />
 
-          {/* Ray visualizing sun direction */}
-          {rayCoords && (
+          {/* Ray visualizing sun direction - ONLY show when in analysis mode */}
+          {isAnalysisMode && rayCoords && (
             <MapboxGL.ShapeSource
               id="raySource"
               shape={{
@@ -395,8 +392,8 @@ const MapScreen = ({ initialLocation }) => {
             </MapboxGL.ShapeSource>
           )}
 
-          {/* 3D Ray Segments */}
-          {raySegments && raySegments.length > 0 && (
+          {/* 3D Ray Segments - ONLY show when in analysis mode */}
+          {isAnalysisMode && raySegments && raySegments.length > 0 && (
             <MapboxGL.ShapeSource
               id="raySegmentsSource"
               shape={{
@@ -511,7 +508,7 @@ const MapScreen = ({ initialLocation }) => {
         )}
 
         {/* Check Sunlight button */}
-        {(showCenterPointer || currentZoom >= 16 || Math.abs(currentZoom - MAX_ZOOM) < 0.5) && !isAnalysisMode && (
+        {(showCenterPointer || currentZoom >= 18 || Math.abs(currentZoom - MAX_ZOOM) < 0.5) && !isAnalysisMode && (
           <CheckSunlightButton onCheckSunlight={handleCheckSunlight} />
         )}
 
@@ -525,7 +522,7 @@ const MapScreen = ({ initialLocation }) => {
           ) : (
             <View style={styles.minimalPanel}>
               <View style={styles.panelHandle} />
-              {showCenterPointer || currentZoom >= 16 || Math.abs(currentZoom - MAX_ZOOM) < 0.5 ? (
+              {showCenterPointer || currentZoom >= 18 || Math.abs(currentZoom - MAX_ZOOM) < 0.5 ? (
                 <Text style={styles.panelText}>
                   Place the pin over a terrace and tap "Check Sunlight"
                 </Text>
