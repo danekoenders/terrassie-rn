@@ -145,8 +145,40 @@ export const checkShadow = (selectedPoint, bearing, sunAltitudeDeg, features) =>
   const rayEnd = turf.destination(point, rayDistance, bearing, { units: 'kilometers' });
   const rayLine = turf.lineString([point.geometry.coordinates, rayEnd.geometry.coordinates]);
   
+  // Ensure features is iterable
+  let featureArray = [];
+  try {
+    // If features is already an array, use it
+    if (Array.isArray(features)) {
+      featureArray = features;
+    } 
+    // If features has forEach, convert to array
+    else if (features && typeof features.forEach === 'function') {
+      featureArray = Array.from(features);
+    } 
+    // If features is a GeoJSON FeatureCollection
+    else if (features && features.features && Array.isArray(features.features)) {
+      featureArray = features.features;
+    }
+    // Otherwise, try to create an array
+    else if (features) {
+      try {
+        featureArray = Array.from(features);
+      } catch (err) {
+        console.error("Error converting features to array:", err);
+        featureArray = [];
+      }
+    }
+  } catch (error) {
+    console.error("Error processing features:", error);
+    featureArray = [];
+  }
+  
   // For each building, check if the ray intersects its footprint
-  for (let feat of features) {
+  for (let i = 0; i < featureArray.length; i++) {
+    const feat = featureArray[i];
+    if (!feat) continue;
+    
     const props = feat.properties || {};
     const height = props.height || 0;
     
@@ -207,7 +239,7 @@ export const checkShadow = (selectedPoint, bearing, sunAltitudeDeg, features) =>
         }
       }
     } catch (error) {
-      console.log("Error processing building:", error);
+      console.error("Error processing building:", error);
     }
   }
 

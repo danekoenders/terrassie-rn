@@ -112,7 +112,9 @@ export const SunlightProvider = ({ children }) => {
    * @param {boolean} skipAnalyzing - Whether to skip setting analyzing state (for auto-updates)
    */
   const checkSunlightForPoint = async (mapRef, skipAnalyzing = false) => {
-    if ((!mapRef || !selectedPoint) && !skipAnalyzing) return;
+    if ((!mapRef || !selectedPoint) && !skipAnalyzing) {
+      return;
+    }
     
     if (!skipAnalyzing) {
       setAnalyzing(true);
@@ -123,6 +125,22 @@ export const SunlightProvider = ({ children }) => {
       // Get map features to check for shadows
       const features = await getMapFeaturesAround(mapRef, selectedPoint);
       
+      if (!features || (Array.isArray(features) && features.length === 0)) {
+        setIsInShadow(false);
+        setBlockerFeature(null);
+        setIntersectionPoint(null);
+        
+        // Update ray visualization without intersection point
+        const rays = calculateRayCoordinates(
+          selectedPoint, 
+          bearingFromNorth, 
+          null, 
+          false
+        );
+        setRayCoords(rays);
+        return;
+      }
+      
       // Check shadow using utility function
       const shadowResult = checkShadow(selectedPoint, bearingFromNorth, sunAltitudeDeg, features);
       
@@ -131,17 +149,28 @@ export const SunlightProvider = ({ children }) => {
       setIntersectionPoint(shadowResult.intersectionPoint);
       
       // Update ray visualization with intersection point if found
-      if (shadowResult.intersectionPoint) {
-        const rays = calculateRayCoordinates(
-          selectedPoint, 
-          bearingFromNorth, 
-          shadowResult.intersectionPoint, 
-          shadowResult.isInShadow
-        );
-        setRayCoords(rays);
-      }
+      const rays = calculateRayCoordinates(
+        selectedPoint, 
+        bearingFromNorth, 
+        shadowResult.intersectionPoint, 
+        shadowResult.isInShadow
+      );
+      setRayCoords(rays);
     } catch (error) {
       console.error("Error checking sunlight:", error);
+      // Set safe default values in case of error
+      setIsInShadow(false);
+      setBlockerFeature(null);
+      setIntersectionPoint(null);
+      
+      // Update ray visualization without intersection point
+      const rays = calculateRayCoordinates(
+        selectedPoint, 
+        bearingFromNorth, 
+        null, 
+        false
+      );
+      setRayCoords(rays);
     } finally {
       if (!skipAnalyzing) {
         setAnalyzing(false);
@@ -172,10 +201,22 @@ export const SunlightProvider = ({ children }) => {
    * @param {Object} mapRef - Reference to the map instance
    */
   const startSunlightAnalysis = async (mapRef) => {
-    if (!selectedPoint) return;
+    if (!selectedPoint) {
+      return;
+    }
     
-    setIsAnalysisMode(true);
-    await checkSunlightForPoint(mapRef);
+    if (!mapRef) {
+      return;
+    }
+    
+    try {
+      setIsAnalysisMode(true);
+      await checkSunlightForPoint(mapRef);
+    } catch (error) {
+      console.error("Error starting sunlight analysis:", error);
+      // Ensure we exit analysis mode if there's an error
+      setIsAnalysisMode(false);
+    }
   };
   
   /**

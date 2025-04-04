@@ -44,7 +44,27 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building',
   
   try {
     // Query rendered features in the viewport
-    return await mapRef.queryRenderedFeaturesInRect([], null, layers);
+    const features = await mapRef.queryRenderedFeaturesInRect([], null, layers);
+    
+    // The error is likely happening because the result isn't directly iterable
+    // Ensure we're returning a proper array
+    if (features && typeof features.forEach === 'function') {
+      // It's already an array-like object with forEach, so we can convert it to an array
+      return Array.from(features);
+    } else if (features && features.features && Array.isArray(features.features)) {
+      // It may be a GeoJSON FeatureCollection
+      return features.features;
+    } else if (features) {
+      // Try converting to array if it's iterable
+      try {
+        return Array.from(features);
+      } catch (err) {
+        // If that fails, return an empty array
+        console.error("Error converting features to array:", err);
+        return [];
+      }
+    }
+    return [];
   } catch (error) {
     console.error("Error getting map features:", error);
     return [];

@@ -4,6 +4,7 @@ import { requestForegroundPermissionsAsync, getCurrentPositionAsync } from 'expo
 import MapboxGL from '@rnmapbox/maps';
 import { SunlightProvider } from './src/context/SunlightContext';
 import MapScreen from './src/components/Map/MapScreen';
+import * as Location from 'expo-location';
 
 // Set Mapbox access token
 MapboxGL.setAccessToken('pk.eyJ1IjoiZGFuZWtvZW5kZXJzIiwiYSI6ImNtODdvNzczZDA4dmcybHF1cnltZmVkbTQifQ.aiCVa0540JxdEivA-rlDTQ');
@@ -11,45 +12,65 @@ MapboxGL.setAccessToken('pk.eyJ1IjoiZGFuZWtvZW5kZXJzIiwiYSI6ImNtODdvNzczZDA4dmcy
 export default function App() {
   const [location, setLocation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Request location permissions and get initial location
-    const getLocation = async () => {
+    (async () => {
       try {
-        console.log('Requesting location permissions...');
-        const { status } = await requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          console.log('Permission to access location was denied');
+          setError('Permission to access location was denied');
           setIsLoading(false);
           return;
         }
 
-        console.log('Getting current position...');
-        const position = await getCurrentPositionAsync({});
-        console.log('Position received:', position);
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
         setLocation([position.coords.longitude, position.coords.latitude]);
         setIsLoading(false);
+        
+        // Set up location updates
+        const locationSubscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 5000,
+            distanceInterval: 10,
+          },
+          (newPosition) => {
+            setLocation([newPosition.coords.longitude, newPosition.coords.latitude]);
+          }
+        );
+        
+        // Clean up subscription when component unmounts
+        return () => {
+          if (locationSubscription) {
+            locationSubscription.remove();
+          }
+        };
       } catch (error) {
-        console.error('Error getting location:', error);
+        setError(error.message);
         setIsLoading(false);
       }
-    };
-
-    getLocation();
+    })();
   }, []);
-
-  // Show loading indicator while getting location
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        <Text>Loading location...</Text>
-      </View>
-    );
-  }
 
   return (
     <SunlightProvider>
-      <MapScreen location={location} />
+      {isLoading ? (
+        <View style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading location...</Text>
+          </View>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorSubtext}>Using default location (Amsterdam)</Text>
+        </View>
+      ) : (
+        <MapScreen location={location} />
+      )}
     </SunlightProvider>
   );
 }
@@ -60,5 +81,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'red',
+  },
+  errorSubtext: {
+    fontSize: 16,
+    color: 'gray',
   },
 });
