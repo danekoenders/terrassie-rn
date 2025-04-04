@@ -48,6 +48,9 @@ export const SunlightProvider = ({ children }) => {
   const [cachedBuildings, setCachedBuildings] = useState(null);
   const [cachedBuildingPoint, setCachedBuildingPoint] = useState(null);
   
+  // Add state to store building data for visualization
+  const [buildingsForDisplay, setBuildingsForDisplay] = useState([]);
+  
   // Store a reference to the map
   const [activeMapRef, setActiveMapRef] = useState(null);
   
@@ -142,6 +145,9 @@ export const SunlightProvider = ({ children }) => {
    * @param {Array} buildingFeatures - Building features to use for calculation
    */
   const updateShadowCalculation = (buildingFeatures) => {
+    console.log(`Recalculating shadows at time ${exactTimeString} with sun at bearing ${bearingFromNorth.toFixed(1)}° and altitude ${sunAltitudeDeg.toFixed(1)}°`);
+    console.log(`Using ${buildingFeatures ? buildingFeatures.length : 0} cached buildings`);
+    
     // Perform 3D ray tracing shadow check with the building data
     const shadowResult = checkShadowWith3DRay(
       selectedPoint, 
@@ -149,6 +155,8 @@ export const SunlightProvider = ({ children }) => {
       sunAltitudeDeg, 
       buildingFeatures
     );
+    
+    console.log(`Ray tracing result: ${shadowResult.isInShadow ? 'IN SHADOW' : 'IN SUNLIGHT'}`);
     
     // Update state with results
     setIsInShadow(shadowResult.isInShadow);
@@ -196,7 +204,45 @@ export const SunlightProvider = ({ children }) => {
       
       if (shouldFetchBuildings) {
         // Get building features within 1km radius using Mapbox Tilequery API
+        console.log(`Fetching buildings for point [${selectedPoint[0].toFixed(5)}, ${selectedPoint[1].toFixed(5)}]`);
         buildingFeatures = await getMapFeaturesAround(mapRef, selectedPoint);
+        console.log(`Retrieved ${buildingFeatures ? buildingFeatures.length : 0} buildings from Mapbox Tilequery API`);
+        
+        // Create visualization features for each building
+        const buildingVisualizations = [];
+        
+        if (buildingFeatures && buildingFeatures.length > 0) {
+          buildingFeatures.forEach((feature, index) => {
+            try {
+              if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
+                // Add center point for each building
+                const center = turf.center(feature);
+                const height = feature.properties.height || feature.properties.render_height || 
+                              (feature.properties.building ? 15 : 0);
+                
+                buildingVisualizations.push({
+                  id: `building-center-${index}`,
+                  type: 'center',
+                  coordinates: center.geometry.coordinates,
+                  height: height
+                });
+                
+                // Add polygon outline for each building
+                buildingVisualizations.push({
+                  id: `building-outline-${index}`,
+                  type: 'outline',
+                  geometry: feature.geometry,
+                  height: height
+                });
+              }
+            } catch (error) {
+              console.log(`Error creating visualization for building: ${error.message}`);
+            }
+          });
+        }
+        
+        // Store the visualizations
+        setBuildingsForDisplay(buildingVisualizations);
         
         // Cache the building features and location for future use
         setCachedBuildings(buildingFeatures);
@@ -204,10 +250,13 @@ export const SunlightProvider = ({ children }) => {
       } else {
         // Use cached buildings if available and we're at the same location
         buildingFeatures = cachedBuildings;
+        console.log(`Using ${buildingFeatures ? buildingFeatures.length : 0} cached buildings for ray tracing`);
       }
       
       // Ensure features is always an array
       const validFeatures = buildingFeatures || [];
+      
+      console.log(`Performing ray tracing with sun at bearing ${bearingFromNorth.toFixed(1)}° and altitude ${sunAltitudeDeg.toFixed(1)}°`);
       
       // Perform 3D ray tracing shadow check with the building data
       const shadowResult = checkShadowWith3DRay(
@@ -217,6 +266,8 @@ export const SunlightProvider = ({ children }) => {
         validFeatures
       );
       
+      console.log(`Ray tracing result: ${shadowResult.isInShadow ? 'IN SHADOW' : 'IN SUNLIGHT'} with ${shadowResult.raySegments ? shadowResult.raySegments.length : 0} ray segments`);
+      
       // Update state with results
       setIsInShadow(shadowResult.isInShadow);
       setBlockerFeature(shadowResult.blockerFeature);
@@ -224,6 +275,7 @@ export const SunlightProvider = ({ children }) => {
       setRaySegments(shadowResult.raySegments);
       
     } catch (error) {
+      console.error("Error in shadow calculation:", error);
       // Fall back to basic ray without shadow detection
       try {
         // When building data can't be fetched, create a simple ray without intersections
@@ -379,6 +431,9 @@ export const SunlightProvider = ({ children }) => {
     isAnalysisMode,
     shouldUpdateCamera,
     setShouldUpdateCamera,
+    
+    // Building visualization
+    buildingsForDisplay,
     
     // Functions
     calculateSunPositionForPoint,

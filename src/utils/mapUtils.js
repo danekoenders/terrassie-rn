@@ -53,6 +53,8 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building']
     
     const endpoint = `https://api.mapbox.com/v4/${tilesetId}/tilequery/${longitude},${latitude}.json?access_token=${MAPBOX_ACCESS_TOKEN}&radius=${radius}&limit=${limit}&layers=building&geometry=polygon`;
     
+    console.log(`Fetching buildings from Mapbox Tilequery API at [${longitude.toFixed(5)}, ${latitude.toFixed(5)}] with ${radius}m radius`);
+    
     // Add a timeout to the fetch to prevent hanging
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);

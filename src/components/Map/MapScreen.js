@@ -13,6 +13,7 @@ import { SearchResults } from "../Search/SearchResults";
 import { ExitButton } from "../Analysis/ExitButton";
 import { TimeSlider } from "../Analysis/TimeSlider";
 import { AnalysisPanel } from "../Analysis/AnalysisPanel";
+import BuildingMarkers from "./BuildingMarkers";
 
 const MapScreen = ({ initialLocation }) => {
   const mapRef = useRef(null);
@@ -468,6 +469,10 @@ const MapScreen = ({ initialLocation }) => {
               />
             </MapboxGL.ShapeSource>
           )}
+
+          {/* Visualize buildings found in radius */}
+          <BuildingMarkers />
+          
         </MapboxGL.MapView>
 
         {/* Loading Indicator */}
