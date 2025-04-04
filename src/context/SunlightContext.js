@@ -2,7 +2,6 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { 
   calculateSunPosition, 
   calculateSunriseSunset, 
-  calculateRayCoordinates, 
   formatTimeFromDecimal,
   checkShadow,
   checkShadowWith3DRay,
@@ -10,6 +9,7 @@ import {
   calculate3DDestinationPoint
 } from '../utils/sunCalculations';
 import { getMapFeaturesAround } from '../utils/mapUtils';
+import * as turf from '@turf/turf';
 
 // Create context
 const SunlightContext = createContext();
@@ -44,6 +44,22 @@ export const SunlightProvider = ({ children }) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [isAnalysisMode, setIsAnalysisMode] = useState(false);
   
+  // Add state to cache building features
+  const [cachedBuildings, setCachedBuildings] = useState(null);
+  const [cachedBuildingPoint, setCachedBuildingPoint] = useState(null);
+  
+  // Store a reference to the map
+  const [activeMapRef, setActiveMapRef] = useState(null);
+  
+  // Add a callback for camera updates
+  const [shouldUpdateCamera, setShouldUpdateCamera] = useState(false);
+  
+  // Reset analysis state to ensure it doesn't get stuck
+  useEffect(() => {
+    setAnalyzing(false);
+    setIsAnalysisMode(false);
+  }, []);
+  
   // Update exact time string when hour or minute changes
   useEffect(() => {
     const hourStr = hour.toString().padStart(2, '0');
@@ -70,6 +86,7 @@ export const SunlightProvider = ({ children }) => {
   
   /**
    * Calculate sun position for the currently selected point
+   * and update ray tracing if in analysis mode
    */
   const calculateSunPositionForPoint = () => {
     if (!selectedPoint) return;
@@ -88,14 +105,18 @@ export const SunlightProvider = ({ children }) => {
     setBearingFromNorth(bearing);
     setSunAltitudeDeg(altitudeDeg);
     
-    // Only calculate ray coordinates if we're in analysis mode
-    // This ensures rays are only shown from the selected analysis point
-    if (isAnalysisMode) {
-      const rays = calculateRayCoordinates(selectedPoint, bearing, intersectionPoint, isInShadow);
-      setRayCoords(rays);
-    } else {
-      // Clear any existing rays when not in analysis mode
-      setRayCoords(null);
+    // We no longer calculate rayCoords here as we'll only use 3D ray segments
+    // for unified ray tracing and visualization
+    setRayCoords(null);
+    
+    // If we're in analysis mode, update the ray tracing with the new sun position
+    // This ensures the ray updates when the time slider changes
+    if (isAnalysisMode && cachedBuildings && !analyzing) {
+      // Use a timeout to ensure state updates have happened
+      setTimeout(() => {
+        // Use cached buildings instead of fetching from API again
+        updateShadowCalculation(cachedBuildings);
+      }, 50);
     }
   };
   
@@ -117,6 +138,26 @@ export const SunlightProvider = ({ children }) => {
   };
   
   /**
+   * Update shadow calculation using already fetched building data
+   * @param {Array} buildingFeatures - Building features to use for calculation
+   */
+  const updateShadowCalculation = (buildingFeatures) => {
+    // Perform 3D ray tracing shadow check with the building data
+    const shadowResult = checkShadowWith3DRay(
+      selectedPoint, 
+      bearingFromNorth, 
+      sunAltitudeDeg, 
+      buildingFeatures
+    );
+    
+    // Update state with results
+    setIsInShadow(shadowResult.isInShadow);
+    setBlockerFeature(shadowResult.blockerFeature);
+    setIntersectionPoint(shadowResult.intersectionPoint);
+    setRaySegments(shadowResult.raySegments);
+  };
+  
+  /**
    * Check if the selected point is in shadow using enhanced 3D ray tracing
    * @param {Object} mapRef - Reference to the map instance
    * @param {boolean} skipAnalyzing - Whether to skip setting analyzing state (for auto-updates)
@@ -126,26 +167,66 @@ export const SunlightProvider = ({ children }) => {
       return;
     }
     
+    // Safety timeout to ensure analyzing state doesn't get stuck
+    let safetyTimeoutId = null;
+    
     if (!skipAnalyzing) {
       setAnalyzing(true);
       setIntersectionPoint(null);
       setRaySegments(null);
+      setRayCoords(null); // Clear 2D ray coords since we're only using 3D segments
+      
+      // Set a safety timeout to reset analyzing state after 15 seconds
+      safetyTimeoutId = setTimeout(() => {
+        setAnalyzing(false);
+      }, 15000);
     }
     
     try {
-      // Get map features to check for shadows
-      console.log("Getting map features around", selectedPoint);
-      const features = await getMapFeaturesAround(mapRef, selectedPoint);
-      console.log(`Found ${features ? features.length : 0} building features`);
+      // Check if we already have cached buildings for this location (within ~10m)
+      const shouldFetchBuildings = !cachedBuildingPoint || 
+        !selectedPoint || 
+        turf.distance(
+          cachedBuildingPoint, 
+          selectedPoint, 
+          { units: 'meters' }
+        ) > 10;
       
-      if (!features || (Array.isArray(features) && features.length === 0)) {
-        // No features case
-        console.log("No building features found, point is in sunlight");
-        setIsInShadow(false);
-        setBlockerFeature(null);
-        setIntersectionPoint(null);
+      let buildingFeatures;
+      
+      if (shouldFetchBuildings) {
+        // Get building features within 1km radius using Mapbox Tilequery API
+        buildingFeatures = await getMapFeaturesAround(mapRef, selectedPoint);
         
-        // Create a simple ray without intersections
+        // Cache the building features and location for future use
+        setCachedBuildings(buildingFeatures);
+        setCachedBuildingPoint(selectedPoint);
+      } else {
+        // Use cached buildings if available and we're at the same location
+        buildingFeatures = cachedBuildings;
+      }
+      
+      // Ensure features is always an array
+      const validFeatures = buildingFeatures || [];
+      
+      // Perform 3D ray tracing shadow check with the building data
+      const shadowResult = checkShadowWith3DRay(
+        selectedPoint, 
+        bearingFromNorth, 
+        sunAltitudeDeg, 
+        validFeatures
+      );
+      
+      // Update state with results
+      setIsInShadow(shadowResult.isInShadow);
+      setBlockerFeature(shadowResult.blockerFeature);
+      setIntersectionPoint(shadowResult.intersectionPoint);
+      setRaySegments(shadowResult.raySegments);
+      
+    } catch (error) {
+      // Fall back to basic ray without shadow detection
+      try {
+        // When building data can't be fetched, create a simple ray without intersections
         if (sunAltitudeDeg > 0) {
           const rayEnd = calculate3DDestinationPoint(
             selectedPoint, 
@@ -162,108 +243,32 @@ export const SunlightProvider = ({ children }) => {
           );
           
           setRaySegments(segments);
-          
-          // Only update standard ray visualization when in analysis mode
-          if (isAnalysisMode) {
-            const rays = calculateRayCoordinates(
-              selectedPoint, 
-              bearingFromNorth, 
-              null, 
-              false
-            );
-            setRayCoords(rays);
-          } else {
-            setRayCoords(null);
-          }
+          setIsInShadow(false);
+          setBlockerFeature(null);
+          setIntersectionPoint(null);
         } else {
           // Night time - no rays
-          console.log("Sun below horizon, no rays to visualize");
           setRaySegments(null);
           setRayCoords(null);
+          setIsInShadow(true);
+          setBlockerFeature(null);
+          setIntersectionPoint(null);
         }
-        
-        return;
-      }
-      
-      // Perform 3D ray tracing shadow check
-      console.log("Performing 3D ray tracing with", features.length, "buildings");
-      const shadowResult = checkShadowWith3DRay(
-        selectedPoint, 
-        bearingFromNorth, 
-        sunAltitudeDeg, 
-        features
-      );
-      
-      // Update state with results
-      console.log("Shadow check result:", shadowResult.isInShadow ? "in shadow" : "in sunlight");
-      setIsInShadow(shadowResult.isInShadow);
-      setBlockerFeature(shadowResult.blockerFeature);
-      setIntersectionPoint(shadowResult.intersectionPoint);
-      setRaySegments(shadowResult.raySegments);
-      
-      // Only update standard ray visualization when in analysis mode
-      if (isAnalysisMode) {
-        const rays = calculateRayCoordinates(
-          selectedPoint, 
-          bearingFromNorth, 
-          shadowResult.intersectionPoint, 
-          shadowResult.isInShadow
-        );
-        setRayCoords(rays);
-      } else {
-        setRayCoords(null);
-      }
-    } catch (error) {
-      console.error("Error checking sunlight with 3D ray tracing:", error);
-      
-      // Fall back to standard shadow check on error
-      try {
-        console.log("Falling back to standard shadow check");
-        // Fallback to standard shadow check
-        const basicShadowResult = checkShadow(selectedPoint, bearingFromNorth, sunAltitudeDeg, features);
-        
-        setIsInShadow(basicShadowResult.isInShadow);
-        setBlockerFeature(basicShadowResult.blockerFeature);
-        setIntersectionPoint(basicShadowResult.intersectionPoint);
-        
-        // Update ray visualization only if in analysis mode
-        if (isAnalysisMode) {
-          const rays = calculateRayCoordinates(
-            selectedPoint, 
-            bearingFromNorth, 
-            basicShadowResult.intersectionPoint, 
-            basicShadowResult.isInShadow
-          );
-          setRayCoords(rays);
-        } else {
-          setRayCoords(null);
-        }
-        setRaySegments(null);
-        console.log("Standard shadow check complete");
       } catch (fallbackError) {
-        console.error("Fallback shadow check also failed:", fallbackError);
         // Set safe default values in case of error
         setIsInShadow(false);
         setBlockerFeature(null);
         setIntersectionPoint(null);
         setRaySegments(null);
-        
-        // Update ray visualization without intersection point only if in analysis mode
-        if (isAnalysisMode) {
-          const rays = calculateRayCoordinates(
-            selectedPoint, 
-            bearingFromNorth, 
-            null, 
-            false
-          );
-          setRayCoords(rays);
-        } else {
-          setRayCoords(null);
-        }
-        console.log("All shadow checks failed, defaulting to sunlight");
+        setRayCoords(null);
       }
     } finally {
       if (!skipAnalyzing) {
+        // Clear safety timeout since we're finishing now
+        if (safetyTimeoutId) {
+          clearTimeout(safetyTimeoutId);
+        }
+        
         setAnalyzing(false);
       }
     }
@@ -272,8 +277,9 @@ export const SunlightProvider = ({ children }) => {
   /**
    * Handle time slider change
    * @param {number} value - Time value in decimal hours
+   * @param {boolean} updateCamera - Whether to also update the camera position
    */
-  const handleTimeChange = (value) => {
+  const handleTimeChange = (value, updateCamera = false) => {
     // Clamp value between sunrise and sunset
     const clampedValue = Math.max(sunriseHour, Math.min(sunsetHour, value));
     setTimeValue(clampedValue);
@@ -285,13 +291,17 @@ export const SunlightProvider = ({ children }) => {
     // Update time state
     setHour(h);
     setMinute(m);
+    
+    // Set the flag to update camera if requested
+    setShouldUpdateCamera(updateCamera);
   };
   
   /**
    * Start sunlight analysis mode
    * @param {Object} mapRef - Reference to the map instance
+   * @param {boolean} updateCamera - Whether to update camera position
    */
-  const startSunlightAnalysis = async (mapRef) => {
+  const startSunlightAnalysis = async (mapRef, updateCamera = false) => {
     if (!selectedPoint) {
       return;
     }
@@ -301,12 +311,18 @@ export const SunlightProvider = ({ children }) => {
     }
     
     try {
+      // Store the map reference for future updates
+      setActiveMapRef(mapRef);
       setIsAnalysisMode(true);
       await checkSunlightForPoint(mapRef);
+      
+      // Return updateCamera flag for the caller to use
+      return updateCamera;
     } catch (error) {
-      console.error("Error starting sunlight analysis:", error);
-      // Ensure we exit analysis mode if there's an error
+      // Ensure we exit analysis mode and reset analyzing state
       setIsAnalysisMode(false);
+      setAnalyzing(false);
+      return false;
     }
   };
   
@@ -361,6 +377,8 @@ export const SunlightProvider = ({ children }) => {
     intersectionPoint,
     analyzing,
     isAnalysisMode,
+    shouldUpdateCamera,
+    setShouldUpdateCamera,
     
     // Functions
     calculateSunPositionForPoint,

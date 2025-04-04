@@ -30,73 +30,74 @@ export const searchMapboxLocations = async (query) => {
 };
 
 /**
- * Get map features around a point
+ * Get map features around a point using Mapbox Tilequery API
  * 
- * @param {Object} mapRef - Reference to the Mapbox GL map instance
+ * @param {Object} mapRef - Reference to the Mapbox GL map instance (not used in API approach)
  * @param {Array} center - [longitude, latitude] coordinates
- * @param {Array} layers - Array of layer ids to query
+ * @param {Array} layers - Array of layer ids to query (optional)
  * @returns {Promise<Array>} Promise resolving to array of features
  */
-export const getMapFeaturesAround = async (mapRef, center, layers = ['building-extrusion']) => {
-  if (!mapRef || !center) {
+export const getMapFeaturesAround = async (mapRef, center, layers = ['building']) => {
+  if (!center || !Array.isArray(center) || center.length !== 2) {
     return [];
   }
   
   try {
-    // Get the current zoom level for proper scaling
-    const zoom = await mapRef.getZoom();
+    // Use Mapbox's Tilequery API to get building data
+    // mapbox.mapbox-streets-v8 is Mapbox's standard dataset that includes building data
+    const tilesetId = 'mapbox.mapbox-streets-v8';
+    const longitude = center[0];
+    const latitude = center[1];
+    const radius = 1000; // 1km radius around the point
+    const limit = 50;   // Increase limit to get more buildings in the radius
     
-    // Calculate bounding box around center point
-    // We'll use a distance that varies based on zoom level
-    const distance = 50 / Math.pow(2, zoom - 10); // meters, scaled by zoom
+    const endpoint = `https://api.mapbox.com/v4/${tilesetId}/tilequery/${longitude},${latitude}.json?access_token=${MAPBOX_ACCESS_TOKEN}&radius=${radius}&limit=${limit}&layers=building&geometry=polygon`;
     
-    // Use a simple approach with a bounding box
-    const [lng, lat] = center;
+    // Add a timeout to the fetch to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     
-    // Approximately convert meters to degrees
-    // This is simplified and works best near the equator
-    const latMeterInDegrees = 1 / 111000; // 1 meter in degrees latitude
-    const lngMeterInDegrees = 1 / (111000 * Math.cos((lat * Math.PI) / 180)); // 1 meter in degrees longitude
-    
-    const latDistance = distance * latMeterInDegrees;
-    const lngDistance = distance * lngMeterInDegrees;
-    
-    // Create the bounding box in format [top, right, bottom, left] as expected by Mapbox
-    const bbox = [
-      lat + latDistance,  // top (max lat)
-      lng + lngDistance,  // right (max lng)
-      lat - latDistance,  // bottom (min lat)
-      lng - lngDistance   // left (min lng)
-    ];
-    
-    // Query features within the bounding box - pass the array directly
-    console.log("Querying with bbox:", bbox);
-    const features = await mapRef.queryRenderedFeaturesInRect(
-      bbox,
-      null,
-      layers
-    );
-    
-    // Ensure we're returning a proper array
-    if (features && typeof features.forEach === 'function') {
-      // It's already an array-like object with forEach, so we can convert it to an array
-      return Array.from(features);
-    } else if (features && features.features && Array.isArray(features.features)) {
-      // It may be a GeoJSON FeatureCollection
-      return features.features;
-    } else if (features) {
-      // Try converting to array if it's iterable
-      try {
-        return Array.from(features);
-      } catch (err) {
-        // If that fails, return an empty array
-        console.error("Error converting features to array:", err);
+    try {
+      const response = await fetch(endpoint, { 
+        signal: controller.signal 
+      });
+      
+      // Clear timeout since request completed
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        return []; // Return empty array on error
+      }
+      
+      const data = await response.json();
+      
+      if (data.features && Array.isArray(data.features)) {
+        // Extract height information from properties if available
+        const processedFeatures = data.features.map(feature => {
+          // If height property doesn't exist, try to estimate based on feature properties
+          if (!feature.properties.height) {
+            const levels = feature.properties.levels || feature.properties.building_levels;
+            // Estimate height based on levels if available (approx 3m per level)
+            if (levels) {
+              feature.properties.height = levels * 3;
+            } else if (feature.properties.building) {
+              // Default height for buildings without specific height data
+              feature.properties.height = 15; // Average 5-story building
+            }
+          }
+          return feature;
+        });
+        
+        return processedFeatures;
+      } else {
         return [];
       }
+    } catch (fetchError) {
+      // Clear timeout if error occurs
+      clearTimeout(timeoutId);
+      return [];
     }
-    return [];
   } catch (error) {
-    console.error("Error getting map features:", error);
     return [];
   }
 };

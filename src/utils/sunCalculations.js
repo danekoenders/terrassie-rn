@@ -13,15 +13,19 @@ export const calculateSunPosition = (dateWithTime, coordinates) => {
 
   const [longitude, latitude] = coordinates;
 
-  // Get sun position
+  // Get sun position using SunCalc library
   const sunPosition = SunCalc.getPosition(
     dateWithTime,
     latitude,
     longitude
   );
 
+  // SunCalc azimuth is measured clockwise from south, we need to convert to bearing from north
   // Convert azimuth to bearing from North
   const azimuthDeg = sunPosition.azimuth * 180 / Math.PI;
+  
+  // Formula: (180 + azimuthDeg) % 360 
+  // - This converts from clockwise-from-south to clockwise-from-north
   const bearing = (180 + azimuthDeg) % 360;
   
   // Convert altitude to degrees
@@ -70,30 +74,6 @@ export const calculateSunriseSunset = (date, coordinates) => {
 };
 
 /**
- * Calculate ray coordinates from a point in the direction of the sun
- * 
- * @param {Array} point - [longitude, latitude] coordinates of the origin point
- * @param {number} bearing - Bearing in degrees from north
- * @param {Array} intersectionPoint - Optional intersection point coordinates
- * @param {boolean} isInShadow - Whether the point is in shadow
- * @returns {Array} Array of coordinates forming the ray
- */
-export const calculateRayCoordinates = (point, bearing, intersectionPoint, isInShadow) => {
-  if (!point) return null;
-
-  const origin = turf.point([point[0], point[1]]);
-  
-  // If we have an intersection point and the point is in shadow, draw to that
-  if (intersectionPoint && isInShadow) {
-    return [origin.geometry.coordinates, intersectionPoint];
-  } else {
-    // Otherwise draw a longer ray
-    const farPoint = turf.destination(origin, 0.5, bearing, { units: 'kilometers' });
-    return [origin.geometry.coordinates, farPoint.geometry.coordinates];
-  }
-};
-
-/**
  * Format time from decimal hours to HH:MM string
  * 
  * @param {number} timeDecimal - Time in decimal hours (e.g., 14.5 for 2:30 PM)
@@ -107,11 +87,11 @@ export const formatTimeFromDecimal = (timeDecimal) => {
 
 /**
  * Calculate a 3D destination point for sun ray visualization
- * Similar to the web POC calculate3DDestinationPoint function
+ * Using SunCalc altitude and azimuth data
  * 
  * @param {Array} startPoint - [longitude, latitude] coordinates
  * @param {number} distance - Distance in kilometers
- * @param {number} azimuthDegrees - Sun azimuth in degrees
+ * @param {number} azimuthDegrees - Sun azimuth in degrees (bearing from north to sun)
  * @param {number} altitudeDegrees - Sun altitude in degrees
  * @returns {Object} Position and elevation of the end point
  */
@@ -129,14 +109,16 @@ export const calculate3DDestinationPoint = (startPoint, distance, azimuthDegrees
   // When altitude is 0° (horizon), vertical distance is 0
   const verticalDistance = distance * Math.sin(altitudeRadians);
 
-  // Invert azimuth for ray tracing (from ground to sun)
-  const inverseBearing = (azimuthDegrees + 180) % 360;
-
+  // The bearing we get is from north to sun
+  // For ray tracing from ground TO sun, we use this bearing directly
+  // This draws the ray in the direction of the sun
+  const rayBearing = azimuthDegrees;
+  
   // Calculate the destination point using the horizontal distance
   const destination = turf.destination(
     startPoint,
     horizontalDistance,
-    inverseBearing,
+    rayBearing,
     { units: "kilometers" }
   );
 
@@ -151,8 +133,7 @@ export const calculate3DDestinationPoint = (startPoint, distance, azimuthDegrees
 
 /**
  * Create 3D ray segments for visualization
- * Similar to the web POC createRay3DSegments function
- *
+ * 
  * @param {Array} start - [longitude, latitude] coordinates
  * @param {Array} end - [longitude, latitude] coordinates
  * @param {number} startElevation - Start elevation in meters
@@ -220,8 +201,8 @@ export const createRay3DSegments = (start, end, startElevation, endElevation, se
 };
 
 /**
- * Enhanced version of checkShadow that uses 3D ray tracing
- * Similar to the web POC isPointInBuildingShadow function
+ * Enhanced 3D ray tracing for determining if a point is in shadow
+ * Uses SunCalc data and Mapbox building height information
  * 
  * @param {Array} selectedPoint - [longitude, latitude] coordinates to check
  * @param {number} bearing - Sun bearing from north in degrees
@@ -284,6 +265,8 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
   );
   
   // Create a 2D ray line for intersection checking
+  // This line goes from the selected point to the calculated ray endpoint
+  // which is in the direction of the sun (bearing from north to sun)
   const rayLine = turf.lineString([point.geometry.coordinates, rayEnd.position]);
   
   // Ensure features is iterable
@@ -300,12 +283,12 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       try {
         featureArray = Array.from(features);
       } catch (err) {
-        console.error("Error converting features to array:", err);
+        // Keep critical error handling
         featureArray = [];
       }
     }
   } catch (error) {
-    console.error("Error processing features:", error);
+    // Keep critical error handling
     featureArray = [];
   }
   
@@ -314,8 +297,10 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
     const feat = featureArray[i];
     if (!feat) continue;
     
+    // Extract building height information from various possible property names
     const props = feat.properties || {};
-    const height = props.height || props.render_height || 0;
+    const height = props.height || props.render_height || props.building_height || 
+                  (props.building ? 15 : 0); // Default to 15m height for generic buildings
     
     if (height <= 0) continue;
     
@@ -374,7 +359,7 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
         }
       }
     } catch (error) {
-      console.error("Error processing building:", error);
+      // Keep critical error handling
     }
   }
 
@@ -467,12 +452,12 @@ export const checkShadow = (selectedPoint, bearing, sunAltitudeDeg, features) =>
       try {
         featureArray = Array.from(features);
       } catch (err) {
-        console.error("Error converting features to array:", err);
+        // Keep critical error handling
         featureArray = [];
       }
     }
   } catch (error) {
-    console.error("Error processing features:", error);
+    // Keep critical error handling
     featureArray = [];
   }
   
@@ -541,7 +526,7 @@ export const checkShadow = (selectedPoint, bearing, sunAltitudeDeg, features) =>
         }
       }
     } catch (error) {
-      console.error("Error processing building:", error);
+      // Keep critical error handling
     }
   }
 

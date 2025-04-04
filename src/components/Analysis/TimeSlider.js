@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useSunlight } from '../../context/SunlightContext';
 import { Colors, Typography } from '../../styles/common';
@@ -11,13 +11,49 @@ export const TimeSlider = () => {
     sunsetHour, 
     exactTimeString,
     formatTimeFromDecimal,
-    handleTimeChange 
+    handleTimeChange,
+    shouldUpdateCamera,
+    setShouldUpdateCamera
   } = useSunlight();
+  
+  // Function to handle slider value change
+  const onSliderValueChange = (value) => {
+    // Normal slider behavior - don't update camera while dragging
+    handleTimeChange(value, false);
+  };
+  
+  // Function to handle slider value change when complete
+  const onSliderValueComplete = (value) => {
+    // When slider is released, update with camera
+    handleTimeChange(value, true);
+    
+    // Force immediate camera update
+    setTimeout(() => {
+      setShouldUpdateCamera(true);
+    }, 100);
+  };
+  
+  // Button to follow the sun orientation
+  const handleFollowSun = () => {
+    // First make sure we update with current time value
+    handleTimeChange(timeValue, false);
+    
+    // Directly trigger camera update with minimal delay
+    setTimeout(() => {
+      setShouldUpdateCamera(true);
+    }, 100);
+  };
   
   return (
     <View style={styles.enhancedSliderContainer}>
       <View style={styles.timeHeaderContainer}>
         <Text style={styles.timeHeaderText}>Time of Day</Text>
+        <TouchableOpacity 
+          style={styles.followSunButton}
+          onPress={handleFollowSun}
+        >
+          <Text style={styles.followSunButtonText}>Follow Sun</Text>
+        </TouchableOpacity>
         <Text style={styles.currentTimeText}>{exactTimeString}</Text>
       </View>
       
@@ -29,7 +65,8 @@ export const TimeSlider = () => {
           maximumValue={sunsetHour}
           step={1/60} // 1-minute intervals
           value={timeValue}
-          onValueChange={handleTimeChange}
+          onValueChange={onSliderValueChange}
+          onSlidingComplete={onSliderValueComplete}
           minimumTrackTintColor={Colors.primary}
           maximumTrackTintColor={Colors.black}
         />
@@ -59,9 +96,24 @@ const styles = StyleSheet.create({
   },
   timeHeaderText: {
     ...Typography.subtitle,
+    flex: 1,
   },
   currentTimeText: {
     ...Typography.subtitle,
+    textAlign: 'right',
+    flex: 1,
+  },
+  followSunButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginHorizontal: 8,
+  },
+  followSunButtonText: {
+    color: Colors.white,
+    fontWeight: '600',
+    fontSize: 12,
   },
   sliderRow: {
     flexDirection: 'row',

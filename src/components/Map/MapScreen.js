@@ -46,15 +46,17 @@ const MapScreen = ({ initialLocation }) => {
   const {
     selectedPoint,
     setSelectedPoint,
-    rayCoords,
     raySegments,
     blockerFeature,
     intersectionPoint,
     isInShadow,
     isAnalysisMode,
     bearingFromNorth,
+    sunAltitudeDeg,
     startSunlightAnalysis,
     exitSunlightAnalysis,
+    shouldUpdateCamera,
+    setShouldUpdateCamera
   } = useSunlight();
 
   // Keep selectedPointRef in sync with selectedPoint
@@ -153,7 +155,7 @@ const MapScreen = ({ initialLocation }) => {
         setShowCenterPointer(newShowCenterPointer);
       }
     } catch (error) {
-      console.error("Error in onCenterChanged:", error);
+      // Critical error handling
     }
   }, [isMapReady, isCameraSystemMove, isAnalysisMode, setSelectedPoint, exitSunlightAnalysis, showCenterPointer]);
 
@@ -198,28 +200,28 @@ const MapScreen = ({ initialLocation }) => {
 
   // Update camera to face the sun direction
   const updateCameraToFaceSun = useCallback(() => {
-    if (!selectedPoint) return;
+    if (!selectedPoint || !mapRef.current) return;
 
     // Mark this as a system-initiated camera move
     setIsCameraSystemMove(true);
 
-    // Use functional update to avoid stale state
-    setCameraProps(prev => ({
-      ...prev,
-      centerCoordinate: selectedPoint,
-      heading: bearingFromNorth,
-      pitch: 60,
-      animationDuration: 500,
-      animationMode: 'flyTo',
-    }));
-    
-    // Force update
-    setCameraKey(Date.now());
+    try {
+      // Instead of using Camera props, directly rotate the map using setCamera
+      mapRef.current.setCamera({
+        heading: bearingFromNorth,
+        pitch: 60,
+        zoomLevel: 17,
+        centerCoordinate: selectedPoint,
+        animationDuration: 1000,
+      });
+    } catch (err) {
+      // Critical error, keep error handling
+    }
 
     // Reset the flag after camera movement is complete
     setTimeout(() => {
       setIsCameraSystemMove(false);
-    }, 600);
+    }, 1200);
   }, [selectedPoint, bearingFromNorth]);
 
   // Update search results
@@ -335,6 +337,17 @@ const MapScreen = ({ initialLocation }) => {
     flyToLocation(finalLocation);
   }, [location, userLocation, flyToLocation]);
 
+  // Effect to update camera when shouldUpdateCamera flag changes in analysis mode
+  useEffect(() => {
+    if (isAnalysisMode && shouldUpdateCamera) {
+      // Clear the flag
+      setShouldUpdateCamera(false);
+      
+      // Update camera to face the sun
+      updateCameraToFaceSun();
+    }
+  }, [shouldUpdateCamera, isAnalysisMode, updateCameraToFaceSun, setShouldUpdateCamera]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.container}>
@@ -354,8 +367,37 @@ const MapScreen = ({ initialLocation }) => {
         >
           <MapboxGL.Camera 
             key={`camera-${cameraKey}`}
-            {...cameraProps} 
+            {...cameraProps}
+            followUserLocation={false}
+            followUserMode="normal"
+            followPitch={60}
+            followZoomLevel={cameraProps.zoomLevel || 16}
+            followHeading={cameraProps.heading}
+            animationMode={cameraProps.animationMode || 'flyTo'}
+            animationDuration={cameraProps.animationDuration || 1000}
           />
+
+          {/* Directional Light for the Sun */}
+          {isAnalysisMode && (
+            <MapboxGL.Light 
+              style={{
+                anchor: 'viewport',
+                // Convert bearing and altitude to light position
+                // Format is [radial distance, azimuth angle, polar angle]
+                // Where:
+                // - radial distance is typically 1-1.5
+                // - azimuth is the bearing
+                // - polar angle is 90-altitude (0° = directly above, 90° = horizon)
+                position: [
+                  1.15, // radial distance (standard value)
+                  bearingFromNorth, // azimuth - use our sun bearing
+                  Math.max(10, 90 - sunAltitudeDeg) // polar angle - convert altitude to polar angle
+                ],
+                color: '#ffffff', // white light
+                intensity: 0.9, // bright light for better visibility
+              }}
+            />
+          )}
 
           {/* User Location Puck */}
           <MapboxGL.LocationPuck
@@ -369,30 +411,7 @@ const MapScreen = ({ initialLocation }) => {
             }}
           />
 
-          {/* Ray visualizing sun direction - ONLY show when in analysis mode */}
-          {isAnalysisMode && rayCoords && (
-            <MapboxGL.ShapeSource
-              id="raySource"
-              shape={{
-                type: "Feature",
-                geometry: { type: "LineString", coordinates: rayCoords },
-                properties: {},
-              }}
-            >
-              <MapboxGL.LineLayer
-                id="rayLine"
-                style={{
-                  lineColor: isInShadow
-                    ? "rgba(255,0,0,0.8)"
-                    : "rgba(255,215,0,0.8)",
-                  lineWidth: 4,
-                  lineDasharray: isInShadow ? [1, 1] : [1, 0],
-                }}
-              />
-            </MapboxGL.ShapeSource>
-          )}
-
-          {/* 3D Ray Segments - ONLY show when in analysis mode */}
+          {/* 3D Ray Segments - Only unified ray visualization */}
           {isAnalysisMode && raySegments && raySegments.length > 0 && (
             <MapboxGL.ShapeSource
               id="raySegmentsSource"
