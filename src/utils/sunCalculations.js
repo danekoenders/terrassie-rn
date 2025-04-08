@@ -211,8 +211,6 @@ export const createRay3DSegments = (start, end, startElevation, endElevation, se
  * @returns {Object} Shadow analysis results with 3D ray tracing data
  */
 export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, features) => {
-  console.log(`Starting ray tracing from [${selectedPoint[0].toFixed(5)}, ${selectedPoint[1].toFixed(5)}] with ${features ? features.length : 0} buildings`);
-  console.log(`Sun angle: ${sunAltitudeDeg.toFixed(1)}° altitude, ${bearing.toFixed(1)}° azimuth`);
   
   // Sun already below horizon - it's night
   if (sunAltitudeDeg <= 0) {
@@ -263,9 +261,6 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
   // Create a ray in the sun's direction
   const rayDistance = 1; // 1 km ray length
   
-  // DEBUG: Add extra log for ray calculation
-  console.log(`Creating ray from selected point with bearing ${bearing.toFixed(1)}° and altitude ${sunAltitudeDeg.toFixed(1)}°`);
-  
   const rayEnd = calculate3DDestinationPoint(
     selectedPoint,
     rayDistance,
@@ -273,19 +268,13 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
     sunAltitudeDeg
   );
   
-  // DEBUG: Log ray endpoint
-  console.log(`Ray endpoint: [${rayEnd.position[0].toFixed(5)}, ${rayEnd.position[1].toFixed(5)}] at height ${rayEnd.elevation.toFixed(1)}m`);
-  
   // Create a 2D ray line for intersection checking
   // This line goes FROM sun direction TO the selected point (opposite of bearing)
   // This is important: we want to check if sunlight can reach the point
   const oppositeBearing = (bearing + 180) % 360;
-  console.log(`Using opposite bearing for ray: ${oppositeBearing.toFixed(1)}° (original: ${bearing.toFixed(1)}°)`);
   
   // Create the ray line in the RIGHT direction - from sun TO point
   const rayLine = turf.lineString([rayEnd.position, point.geometry.coordinates]);
-  
-  console.log(`Created ray line from sun to point with bearing ${oppositeBearing.toFixed(1)}° and altitude ${sunAltitudeDeg.toFixed(1)}°`);
   
   // Ensure features is iterable
   let featureArray = [];
@@ -301,20 +290,16 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       try {
         featureArray = Array.from(features);
       } catch (err) {
-        // Keep critical error handling
         featureArray = [];
       }
     }
   } catch (error) {
-    // Keep critical error handling
     featureArray = [];
   }
   
   // Detailed feature inspection
-  console.log(`Checking ${featureArray.length} buildings for ray intersection`);
   if (featureArray.length > 0) {
     const sampleBuilding = featureArray[0];
-    console.log(`Sample building: type=${sampleBuilding.geometry?.type}, props=${JSON.stringify(sampleBuilding.properties)}`);
   }
   
   let buildingsWithHeight = 0;
@@ -363,7 +348,6 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
         try {
           // Ensure valid polygon coordinates
           if (!polygon.coordinates || !polygon.coordinates.length || !polygon.coordinates[0] || polygon.coordinates[0].length < 4) {
-            console.log("Skipping invalid polygon coordinates");
             continue;
           }
           
@@ -375,7 +359,6 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
           
           if (intersects) {
             buildingsWithIntersections++;
-            console.log(`Ray intersects building ${i} with height ${height}m`);
             
             // Find the intersection point between ray and building
             try {
@@ -391,8 +374,6 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
                   
                   // Calculate the sun ray's height at this distance based on altitude angle
                   const rayHeight = dist * Math.tan(sunAltitudeDeg * Math.PI / 180);
-                  
-                  console.log(`At distance ${dist.toFixed(1)}m, ray height is ${rayHeight.toFixed(1)}m, building height is ${height}m`);
                   
                   // If building is taller than ray's height at this point, it blocks sun
                   if (height > rayHeight && dist < minDistance) {
@@ -417,16 +398,10 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       console.log(`Error processing building: ${error.message}`);
     }
   }
-
-  console.log(`Ray tracing summary: 
-  - ${buildingsChecked} buildings checked out of ${buildingsWithHeight} with height data
-  - ${buildingsWithIntersections} buildings intersected by ray
-  - Result: ${inShadow ? 'IN SHADOW' : 'IN SUNLIGHT'}`);
   
   // Create ray segments based on intersection results
   let raySegments;
   if (inShadow && closestIntersection) {
-    console.log(`Creating shadow ray that stops at building intersection ${minDistance.toFixed(1)}m away`);
     // If in shadow, create ray segments that stop at the building
     raySegments = createRay3DSegments(
       selectedPoint,
@@ -435,7 +410,6 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       intersectionHeight
     );
   } else {
-    console.log(`Creating full sunlight ray without obstructions`);
     // If not in shadow, create full ray segments
     raySegments = createRay3DSegments(
       selectedPoint,
