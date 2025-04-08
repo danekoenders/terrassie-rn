@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { StyleSheet, View, SafeAreaView, Text, ActivityIndicator } from "react-native";
+import { StyleSheet, View, SafeAreaView, Text, ActivityIndicator, TouchableOpacity } from "react-native";
 import MapboxGL from "@rnmapbox/maps";
 import { useSunlight } from "../../context/SunlightContext";
 import { Colors, Shadows } from "../../styles/common";
 import * as Location from 'expo-location';
+import * as turf from '@turf/turf';
 
 // Import components
 import CenterPointer from "./CenterPointer";
@@ -57,7 +58,10 @@ const MapScreen = ({ initialLocation }) => {
     startSunlightAnalysis,
     exitSunlightAnalysis,
     shouldUpdateCamera,
-    setShouldUpdateCamera
+    setShouldUpdateCamera,
+    cachedBuildings,
+    showBuildingPoints,
+    setShowBuildingPoints
   } = useSunlight();
 
   // Keep selectedPointRef in sync with selectedPoint
@@ -207,8 +211,9 @@ const MapScreen = ({ initialLocation }) => {
     setIsCameraSystemMove(true);
 
     try {
-      // Instead of using Camera props, directly rotate the map using setCamera
-      mapRef.current.setCamera({
+      // Use Camera#setCamera instead of MapView.setCamera (which is deprecated)
+      const camera = mapRef.current.getCamera();
+      camera.setCamera({
         heading: bearingFromNorth,
         pitch: 60,
         zoomLevel: 17,
@@ -349,6 +354,11 @@ const MapScreen = ({ initialLocation }) => {
     }
   }, [shouldUpdateCamera, isAnalysisMode, updateCameraToFaceSun, setShouldUpdateCamera]);
 
+  // Toggle building points visibility
+  const toggleBuildingPoints = useCallback(() => {
+    setShowBuildingPoints(!showBuildingPoints);
+  }, [showBuildingPoints, setShowBuildingPoints]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.container}>
@@ -394,7 +404,7 @@ const MapScreen = ({ initialLocation }) => {
                   bearingFromNorth, // azimuth - use our sun bearing
                   Math.max(10, 90 - sunAltitudeDeg) // polar angle - convert altitude to polar angle
                 ],
-                color: '#ffffff', // white light
+                color: "rgba(255, 255, 255, 1.0)", // white light as rgba
                 intensity: 0.9, // bright light for better visibility
               }}
             />
@@ -407,10 +417,45 @@ const MapScreen = ({ initialLocation }) => {
             puckBearingEnabled={true}
             pulsing={{
               isEnabled: true,
-              color: Colors.primary,
+              color: "rgba(255, 207, 48, 0.8)",
               radius: 'accuracy'
             }}
           />
+
+          {/* Building Point Annotations */}
+          {showBuildingPoints && cachedBuildings && cachedBuildings.length > 0 && (
+            <MapboxGL.ShapeSource
+              id="buildingsSource"
+              shape={{
+                type: "FeatureCollection",
+                features: cachedBuildings.map(building => {
+                  // Create a point at the center of the building polygon
+                  const center = turf.center(building);
+                  return {
+                    type: "Feature",
+                    geometry: {
+                      type: "Point",
+                      coordinates: center.geometry.coordinates,
+                    },
+                    properties: {
+                      id: building.id || Math.random().toString(36).substring(7),
+                      height: building.properties.height || 15,
+                    },
+                  };
+                }),
+              }}
+            >
+              <MapboxGL.CircleLayer
+                id="buildingsCircleLayer"
+                style={{
+                  circleRadius: 4,
+                  circleColor: "rgba(0, 128, 255, 0.8)",
+                  circleStrokeWidth: 1,
+                  circleStrokeColor: "white",
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          )}
 
           {/* 3D Ray Segments - Only unified ray visualization */}
           {isAnalysisMode && raySegments && raySegments.length > 0 && (
@@ -493,7 +538,6 @@ const MapScreen = ({ initialLocation }) => {
         )}
 
         {/* UI Overlays */}
-
         {/* Top search bar and location button */}
         {!isAnalysisMode && (
           <View style={styles.topContainer}>
@@ -513,6 +557,18 @@ const MapScreen = ({ initialLocation }) => {
 
         {/* Exit analysis mode button */}
         {isAnalysisMode && <ExitButton onExit={exitSunlightAnalysis} />}
+
+        {/* Building points toggle button */}
+        {isAnalysisMode && cachedBuildings && cachedBuildings.length > 0 && (
+          <TouchableOpacity 
+            style={styles.buildingsToggleButton}
+            onPress={toggleBuildingPoints}
+          >
+            <Text style={styles.buildingsToggleText}>
+              {showBuildingPoints ? "Hide Buildings" : "Show Buildings"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Center pointer for selecting a point */}
         {showCenterPointer && !isAnalysisMode && <CenterPointer />}
@@ -619,6 +675,7 @@ const styles = StyleSheet.create({
   minimalPanel: {
     alignItems: "center",
     paddingVertical: 20,
+    backgroundColor: Colors.white,
   },
   panelHandle: {
     width: 40,
@@ -664,6 +721,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  buildingsToggleButton: {
+    position: 'absolute',
+    top: 120,
+    right: 16,
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    ...Shadows.small,
+    backgroundColor: Colors.white, // Explicit background color for shadow
+  },
+  buildingsToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.gray,
   },
 });
 

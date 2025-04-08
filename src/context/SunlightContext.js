@@ -57,6 +57,9 @@ export const SunlightProvider = ({ children }) => {
   // Add a callback for camera updates
   const [shouldUpdateCamera, setShouldUpdateCamera] = useState(false);
   
+  // Add a flag to control visibility of building points
+  const [showBuildingPoints, setShowBuildingPoints] = useState(true);
+  
   // Reset analysis state to ensure it doesn't get stuck
   useEffect(() => {
     setAnalyzing(false);
@@ -244,6 +247,24 @@ export const SunlightProvider = ({ children }) => {
         // Store the visualizations
         setBuildingsForDisplay(buildingVisualizations);
         
+        // Log the buildings found
+        console.log(`Found ${buildingFeatures.length} buildings around ${selectedPoint}`);
+        
+        // Log building details for ray tracing
+        console.log("Starting ray tracing with these building parameters:");
+        console.log(`Sun altitude: ${sunAltitudeDeg}°, bearing: ${bearingFromNorth}°`);
+        
+        if (buildingFeatures.length > 0) {
+          // Log a few sample buildings
+          const sampleSize = Math.min(3, buildingFeatures.length);
+          for (let i = 0; i < sampleSize; i++) {
+            const building = buildingFeatures[i];
+            console.log(`Building ${i}:`);
+            console.log(`- Height: ${building.properties.height}m`);
+            console.log(`- Coordinates: Polygon with ${building.geometry.coordinates[0].length} points`);
+          }
+        }
+        
         // Cache the building features and location for future use
         setCachedBuildings(buildingFeatures);
         setCachedBuildingPoint(selectedPoint);
@@ -256,7 +277,7 @@ export const SunlightProvider = ({ children }) => {
       // Ensure features is always an array
       const validFeatures = buildingFeatures || [];
       
-      console.log(`Performing ray tracing with sun at bearing ${bearingFromNorth.toFixed(1)}° and altitude ${sunAltitudeDeg.toFixed(1)}°`);
+      console.log(`Performing shadow analysis with ${validFeatures.length} buildings...`);
       
       // Perform 3D ray tracing shadow check with the building data
       const shadowResult = checkShadowWith3DRay(
@@ -266,7 +287,11 @@ export const SunlightProvider = ({ children }) => {
         validFeatures
       );
       
-      console.log(`Ray tracing result: ${shadowResult.isInShadow ? 'IN SHADOW' : 'IN SUNLIGHT'} with ${shadowResult.raySegments ? shadowResult.raySegments.length : 0} ray segments`);
+      // Log the shadow analysis result
+      console.log(`Shadow analysis result: ${shadowResult.isInShadow ? 'IN SHADOW' : 'IN SUNLIGHT'}`);
+      if (shadowResult.isInShadow && shadowResult.blockerFeature) {
+        console.log(`Blocking building height: ${shadowResult.blockerFeature.properties.height}m`);
+      }
       
       // Update state with results
       setIsInShadow(shadowResult.isInShadow);
@@ -275,7 +300,8 @@ export const SunlightProvider = ({ children }) => {
       setRaySegments(shadowResult.raySegments);
       
     } catch (error) {
-      console.error("Error in shadow calculation:", error);
+      console.error("Error in shadow analysis:", error);
+      
       // Fall back to basic ray without shadow detection
       try {
         // When building data can't be fetched, create a simple ray without intersections
@@ -432,8 +458,10 @@ export const SunlightProvider = ({ children }) => {
     shouldUpdateCamera,
     setShouldUpdateCamera,
     
-    // Building visualization
-    buildingsForDisplay,
+    // Building data
+    cachedBuildings,
+    showBuildingPoints,
+    setShowBuildingPoints,
     
     // Functions
     calculateSunPositionForPoint,

@@ -16,6 +16,7 @@ const styles = StyleSheet.create({
     top: 60,
     right: 16,
     ...Buttons.secondary,
+    backgroundColor: Colors.white,
     zIndex: 10,
   },
   exitButtonText: {
