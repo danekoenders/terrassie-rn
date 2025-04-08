@@ -148,9 +148,6 @@ export const SunlightProvider = ({ children }) => {
    * @param {Array} buildingFeatures - Building features to use for calculation
    */
   const updateShadowCalculation = (buildingFeatures) => {
-    console.log(`Recalculating shadows at time ${exactTimeString} with sun at bearing ${bearingFromNorth.toFixed(1)}° and altitude ${sunAltitudeDeg.toFixed(1)}°`);
-    console.log(`Using ${buildingFeatures ? buildingFeatures.length : 0} cached buildings`);
-    
     // Perform 3D ray tracing shadow check with the building data
     const shadowResult = checkShadowWith3DRay(
       selectedPoint, 
@@ -158,8 +155,6 @@ export const SunlightProvider = ({ children }) => {
       sunAltitudeDeg, 
       buildingFeatures
     );
-    
-    console.log(`Ray tracing result: ${shadowResult.isInShadow ? 'IN SHADOW' : 'IN SUNLIGHT'}`);
     
     // Update state with results
     setIsInShadow(shadowResult.isInShadow);
@@ -207,9 +202,7 @@ export const SunlightProvider = ({ children }) => {
       
       if (shouldFetchBuildings) {
         // Get building features within 1km radius using Mapbox Tilequery API
-        console.log(`Fetching buildings for point [${selectedPoint[0].toFixed(5)}, ${selectedPoint[1].toFixed(5)}]`);
         buildingFeatures = await getMapFeaturesAround(mapRef, selectedPoint);
-        console.log(`Retrieved ${buildingFeatures ? buildingFeatures.length : 0} buildings from Mapbox Tilequery API`);
         
         // Create visualization features for each building
         const buildingVisualizations = [];
@@ -239,7 +232,7 @@ export const SunlightProvider = ({ children }) => {
                 });
               }
             } catch (error) {
-              console.log(`Error creating visualization for building: ${error.message}`);
+              // Error creating visualization for building
             }
           });
         }
@@ -247,37 +240,16 @@ export const SunlightProvider = ({ children }) => {
         // Store the visualizations
         setBuildingsForDisplay(buildingVisualizations);
         
-        // Log the buildings found
-        console.log(`Found ${buildingFeatures.length} buildings around ${selectedPoint}`);
-        
-        // Log building details for ray tracing
-        console.log("Starting ray tracing with these building parameters:");
-        console.log(`Sun altitude: ${sunAltitudeDeg}°, bearing: ${bearingFromNorth}°`);
-        
-        if (buildingFeatures.length > 0) {
-          // Log a few sample buildings
-          const sampleSize = Math.min(3, buildingFeatures.length);
-          for (let i = 0; i < sampleSize; i++) {
-            const building = buildingFeatures[i];
-            console.log(`Building ${i}:`);
-            console.log(`- Height: ${building.properties.height}m`);
-            console.log(`- Coordinates: Polygon with ${building.geometry.coordinates[0].length} points`);
-          }
-        }
-        
         // Cache the building features and location for future use
         setCachedBuildings(buildingFeatures);
         setCachedBuildingPoint(selectedPoint);
       } else {
         // Use cached buildings if available and we're at the same location
         buildingFeatures = cachedBuildings;
-        console.log(`Using ${buildingFeatures ? buildingFeatures.length : 0} cached buildings for ray tracing`);
       }
       
       // Ensure features is always an array
       const validFeatures = buildingFeatures || [];
-      
-      console.log(`Performing shadow analysis with ${validFeatures.length} buildings...`);
       
       // Perform 3D ray tracing shadow check with the building data
       const shadowResult = checkShadowWith3DRay(
@@ -286,12 +258,6 @@ export const SunlightProvider = ({ children }) => {
         sunAltitudeDeg, 
         validFeatures
       );
-      
-      // Log the shadow analysis result
-      console.log(`Shadow analysis result: ${shadowResult.isInShadow ? 'IN SHADOW' : 'IN SUNLIGHT'}`);
-      if (shadowResult.isInShadow && shadowResult.blockerFeature) {
-        console.log(`Blocking building height: ${shadowResult.blockerFeature.properties.height}m`);
-      }
       
       // Update state with results
       setIsInShadow(shadowResult.isInShadow);

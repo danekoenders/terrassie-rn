@@ -49,8 +49,6 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building']
   }
   
   try {
-    console.log("Getting buildings directly from the map...");
-    
     // For Mapbox v10, we can pass an empty array to query the entire visible area
     // For older versions, we need to get the visible bounds and create a rectangle
     
@@ -67,12 +65,10 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building']
     
     // Check if we got a valid feature collection
     if (!featureCollection || !featureCollection.features) {
-      console.log("No features found in query result");
       return [];
     }
     
     const features = featureCollection.features;
-    console.log(`Found ${features.length} features in the current map view`);
     
     // Filter features to those that match building characteristics:
     // - Polygon geometry
@@ -97,26 +93,13 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building']
       );
     });
     
-    console.log(`Identified ${buildingFeatures.length} building features`);
-    
     // If we don't find any buildings, use a fallback approach
     if (buildingFeatures.length === 0) {
-      console.log("No buildings found with standard criteria, looking for any polygons");
-      
       // Try to find any polygons as potential buildings
       const polygonFeatures = features.filter(feature => 
         feature.geometry && 
         feature.geometry.type === 'Polygon'
       );
-      
-      // Log the first few polygon features if available
-      if (polygonFeatures.length > 0) {
-        const sampleSize = Math.min(3, polygonFeatures.length);
-        console.log(`Found ${polygonFeatures.length} polygons. Sample properties:`);
-        for (let i = 0; i < sampleSize; i++) {
-          console.log(`Polygon ${i} properties:`, polygonFeatures[i].properties);
-        }
-      }
       
       // Process polygon features as if they were buildings with default height
       if (polygonFeatures.length > 0) {
@@ -133,7 +116,6 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building']
           return processedFeature;
         });
         
-        console.log(`Processed ${processedFeatures.length} polygon features as buildings`);
         return processedFeatures;
       }
     }
@@ -169,11 +151,9 @@ export const getMapFeaturesAround = async (mapRef, center, layers = ['building']
       return processedFeature;
     });
     
-    console.log(`Successfully processed ${processedFeatures.length} building features`);
     return processedFeatures;
   } catch (error) {
     console.error("Error getting buildings from map:", error);
-    console.log("Error details:", error.message);
     
     // Fall back to an empty array
     return [];
