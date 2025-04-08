@@ -54,6 +54,9 @@ export const SunlightProvider = ({ children }) => {
   // Add a callback for camera updates
   const [shouldUpdateCamera, setShouldUpdateCamera] = useState(false);
   
+  // Add a flag to control visibility of building points
+  const [showBuildingPoints, setShowBuildingPoints] = useState(true);
+  
   // Reset analysis state to ensure it doesn't get stuck
   useEffect(() => {
     setAnalyzing(false);
@@ -197,6 +200,16 @@ export const SunlightProvider = ({ children }) => {
       if (shouldFetchBuildings) {
         // Get building features within 1km radius using Mapbox Tilequery API
         buildingFeatures = await getMapFeaturesAround(mapRef, selectedPoint);
+        
+        // Log the buildings found
+        console.log(`Found ${buildingFeatures.length} buildings around ${selectedPoint}`);
+        
+        // Log building details for debugging
+        buildingFeatures.forEach((building, index) => {
+          const height = building.properties.height || 'unknown';
+          const id = building.id || `building-${index}`;
+          console.log(`Building ${id} - Height: ${height}m`);
+        });
         
         // Cache the building features and location for future use
         setCachedBuildings(buildingFeatures);
@@ -379,6 +392,11 @@ export const SunlightProvider = ({ children }) => {
     isAnalysisMode,
     shouldUpdateCamera,
     setShouldUpdateCamera,
+    
+    // Building data
+    cachedBuildings,
+    showBuildingPoints,
+    setShowBuildingPoints,
     
     // Functions
     calculateSunPositionForPoint,
