@@ -36,10 +36,11 @@ const MapScreen = ({ initialLocation }) => {
   const effectiveLocation = location || [4.9041, 52.3676];
 
   const [cameraProps, setCameraProps] = useState({
-    centerCoordinate: [4.9041, 52.3676], // Default to Amsterdam
-    zoomLevel: 12,
-    animationDuration: 1000,
-    animationMode: 'flyTo',
+    centerCoordinate: effectiveLocation, // Use effectiveLocation instead of hardcoded Amsterdam
+    zoomLevel: 16, // Start with a closer zoom
+    animationDuration: 0, // No initial animation
+    animationMode: 'none',
+    pitch: 45, // Add an initial pitch for a more dynamic view
   });
 
   // Add a timestamp state to force camera re-render
@@ -68,6 +69,50 @@ const MapScreen = ({ initialLocation }) => {
   useEffect(() => {
     selectedPointRef.current = selectedPoint;
   }, [selectedPoint]);
+
+  // Initialize map with user location
+  useEffect(() => {
+    const initializeMapLocation = async () => {
+      try {
+        // Check if permissions were already granted
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          // Get the current position
+          const currentPosition = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced
+          });
+          
+          if (currentPosition && currentPosition.coords) {
+            const userCoords = [currentPosition.coords.longitude, currentPosition.coords.latitude];
+            
+            // Update location state
+            setLocation(userCoords);
+            setUserLocation(userCoords);
+            
+            // Update camera to user location
+            setCameraProps(prev => ({
+              ...prev,
+              centerCoordinate: userCoords,
+              zoomLevel: 16,
+              animationDuration: 0,
+              animationMode: 'none',
+              pitch: 45, // Add pitch here as well
+            }));
+            
+            // Force camera update
+            setCameraKey(Date.now());
+          }
+        }
+      } catch (error) {
+        console.log('Error getting initial location:', error);
+      }
+    };
+
+    // Only initialize if map is ready and we don't have a location yet
+    if (isMapReady && !location) {
+      initializeMapLocation();
+    }
+  }, [isMapReady]);
 
   // Initialize map with user location - memoize the effect dependencies
   const memoizedEffectiveLocation = useMemo(() => effectiveLocation, [
@@ -142,8 +187,8 @@ const MapScreen = ({ initialLocation }) => {
       }
 
       // Determine if we should show the center pointer
-      // Use just the zoom threshold of 16 or if we're close to max zoom
-      const isHighZoom = zoom >= 16 || zoom >= (MAX_ZOOM - 1);
+      // Use just the zoom threshold of 19 for analysis mode
+      const isHighZoom = zoom >= 19;
       const newShowCenterPointer = isHighZoom;
       
       // If we just crossed the threshold, show zoom message
@@ -186,8 +231,8 @@ const MapScreen = ({ initialLocation }) => {
         ...prev,
         centerCoordinate: targetCoords,
         animationDuration: 1000,
-        // Set zoom to at least 16 to help users get to the analysis UI faster
-        zoomLevel: Math.max(currentZoom, 16),
+        // Set zoom to at least 19 to help users get to the analysis UI faster
+        zoomLevel: Math.max(currentZoom, 19),
         animationMode: 'flyTo',
       }));
       
@@ -588,7 +633,7 @@ const MapScreen = ({ initialLocation }) => {
         )}
 
         {/* Check Sunlight button */}
-        {(showCenterPointer || currentZoom >= 18 || Math.abs(currentZoom - MAX_ZOOM) < 0.5) && !isAnalysisMode && (
+        {(showCenterPointer || currentZoom >= 19 ) && !isAnalysisMode && (
           <CheckSunlightButton onCheckSunlight={handleCheckSunlight} />
         )}
 
@@ -602,7 +647,7 @@ const MapScreen = ({ initialLocation }) => {
           ) : (
             <View style={styles.minimalPanel}>
               <View style={styles.panelHandle} />
-              {showCenterPointer || currentZoom >= 18 || Math.abs(currentZoom - MAX_ZOOM) < 0.5 ? (
+              {showCenterPointer || currentZoom >= 19 ? (
                 <Text style={styles.panelText}>
                   Place the pin over a terrace and tap "Check Sunlight"
                 </Text>
