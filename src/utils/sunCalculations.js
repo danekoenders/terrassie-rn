@@ -377,7 +377,6 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
                   
                   // If building is taller than ray's height at this point, it blocks sun
                   if (height > rayHeight && dist < minDistance) {
-                    console.log(`SHADOW DETECTED: Building blocks sun at ${dist.toFixed(1)}m distance`);
                     minDistance = dist;
                     inShadow = true;
                     blocker = feat;

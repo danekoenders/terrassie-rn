@@ -162,6 +162,9 @@ const MapScreen = ({ initialLocation }) => {
     setMapLoading(false);
   }, []);
 
+  // Create a separate ref to store analysis position
+  const analysisPointRef = useRef(null);
+
   // Get center coordinates of the map view - memoize to prevent unnecessary recreations
   const onCenterChanged = useCallback(async () => {
     if (!mapRef.current || !isMapReady) return;
@@ -173,11 +176,20 @@ const MapScreen = ({ initialLocation }) => {
       // Set current zoom for rendering
       setCurrentZoom(zoom);
       
-      // Only update selectedPoint if it actually changed significantly
-      if (!selectedPointRef.current || 
-          Math.abs(selectedPointRef.current[0] - center[0]) > 0.0001 || 
-          Math.abs(selectedPointRef.current[1] - center[1]) > 0.0001) {
-        setSelectedPoint(center);
+      // Only update selectedPoint if we're not in analysis mode
+      // This prevents drift during analysis
+      if (!isAnalysisMode) {
+        // Only update selectedPoint if it actually changed significantly
+        if (!selectedPointRef.current || 
+            Math.abs(selectedPointRef.current[0] - center[0]) > 0.0001 || 
+            Math.abs(selectedPointRef.current[1] - center[1]) > 0.0001) {
+          setSelectedPoint(center);
+        }
+
+        // When not in analysis mode, also update the analysis point ref
+        if (center) {
+          analysisPointRef.current = [...center];
+        }
       }
 
       // If the camera move wasn't initiated by the system and we're in analysis mode
@@ -300,31 +312,45 @@ const MapScreen = ({ initialLocation }) => {
   }, [setSelectedPoint, flyToLocation]);
 
   // Handle check sunlight button press
-  const handleCheckSunlight = useCallback(() => {
+  const handleCheckSunlight = useCallback(async () => {
     try {
       if (!mapRef.current) {
         alert("Map not ready. Please try again in a moment.");
         return;
       }
       
-      if (!selectedPoint) {
-        alert("No point selected. Please move the map to select a location.");
+      // Get the exact center of the screen at the time of clicking
+      const exactCenter = await mapRef.current.getCenter();
+      
+      if (!exactCenter) {
+        alert("Could not determine center point. Please try again.");
         return;
       }
       
-      startSunlightAnalysis(mapRef.current);
-      updateCameraToFaceSun();
+      // Update the selected point with the exact center from the map
+      setSelectedPoint(exactCenter);
+      
+      // Store the exact analysis point when starting analysis
+      analysisPointRef.current = [...exactCenter];
+      
+      // Small delay to ensure state is updated before starting analysis
+      setTimeout(() => {
+        startSunlightAnalysis(mapRef.current);
+        updateCameraToFaceSun();
+      }, 50);
     } catch (error) {
+      console.error("Error in handleCheckSunlight:", error);
       alert("Error checking sunlight. Please try again.");
     }
-  }, [selectedPoint, startSunlightAnalysis, updateCameraToFaceSun]);
+  }, [setSelectedPoint, startSunlightAnalysis, updateCameraToFaceSun]);
 
   // Set up location updates
   useEffect(() => {
     let locationSubscription;
     
     // Only set up location tracking if we're not already manually navigating
-    if (!isManuallyNavigating) {
+    // AND we're not in analysis mode
+    if (!isManuallyNavigating && !isAnalysisMode) {
       (async () => {
         try {
           // Check if permissions were already granted
@@ -344,9 +370,13 @@ const MapScreen = ({ initialLocation }) => {
               if (newPosition && newPosition.coords) {
                 const newLocation = [newPosition.coords.longitude, newPosition.coords.latitude];
                 
-                // Update both our location state and userLocation state
-                setLocation(newLocation);
+                // Only update user location
                 setUserLocation(newLocation);
+                
+                // Only update general location if we're not in analysis mode
+                if (!isAnalysisMode) {
+                  setLocation(newLocation);
+                }
               }
             }
           );
@@ -361,7 +391,7 @@ const MapScreen = ({ initialLocation }) => {
         locationSubscription.remove();
       }
     };
-  }, [isManuallyNavigating]); // Only depends on isManuallyNavigating to avoid re-creating when userLocation changes
+  }, [isManuallyNavigating, isAnalysisMode]); // Add isAnalysisMode as dependency
 
   // Direct function to handle location button press
   const handleLocationButtonPress = useCallback(() => {
@@ -390,14 +420,12 @@ const MapScreen = ({ initialLocation }) => {
 
   // Effect to update camera when shouldUpdateCamera flag changes in analysis mode
   useEffect(() => {
-    if (isAnalysisMode && shouldUpdateCamera) {
-      // Clear the flag
-      setShouldUpdateCamera(false);
-      
-      // Update camera to face the sun
-      updateCameraToFaceSun();
+    if (isAnalysisMode && shouldUpdateCamera && analysisPointRef.current) {
+      // Always ensure the selected point matches our stored analysis point
+      // This ensures we're analyzing the correct location after time changes
+      setSelectedPoint([...analysisPointRef.current]);
     }
-  }, [shouldUpdateCamera, isAnalysisMode, updateCameraToFaceSun, setShouldUpdateCamera]);
+  }, [isAnalysisMode, shouldUpdateCamera, setSelectedPoint]);
 
   // Toggle building points visibility
   const toggleBuildingPoints = useCallback(() => {
@@ -502,8 +530,8 @@ const MapScreen = ({ initialLocation }) => {
             </MapboxGL.ShapeSource>
           )}
 
-          {/* 3D Ray Segments - Only unified ray visualization */}
-          {isAnalysisMode && raySegments && raySegments.length > 0 && (
+          {/* 3D Ray Segments - Only shown when in shadow */}
+          {isAnalysisMode && isInShadow && raySegments && raySegments.length > 0 && (
             <MapboxGL.ShapeSource
               id="raySegmentsSource"
               shape={{
@@ -514,9 +542,7 @@ const MapScreen = ({ initialLocation }) => {
               <MapboxGL.FillExtrusionLayer
                 id="raySegmentsLayer"
                 style={{
-                  fillExtrusionColor: isInShadow
-                    ? "rgba(255,0,0,0.7)"
-                    : "rgba(255,215,0,0.7)",
+                  fillExtrusionColor: "rgba(255,0,0,0.7)",
                   fillExtrusionOpacity: 0.7,
                   fillExtrusionBase: ["get", "base"],
                   fillExtrusionHeight: ["get", "height"],
