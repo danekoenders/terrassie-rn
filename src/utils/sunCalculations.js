@@ -367,11 +367,6 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
     featureArray = [];
   }
   
-  // Detailed feature inspection
-  if (featureArray.length > 0) {
-    const sampleBuilding = featureArray[0];
-  }
-  
   let buildingsWithHeight = 0;
   let buildingsChecked = 0;
   let buildingsWithIntersections = 0;

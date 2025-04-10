@@ -38,7 +38,7 @@ export const searchMapboxLocations = async (query) => {
  * @param {Array} layers - Array of layer ids to query (optional)
  * @returns {Promise<Array>} Promise resolving to array of features
  */
-export const getMapFeaturesAround = async (mapRef, center, layers = ['building']) => {
+export const getMapFeaturesAround = async (mapRef, center) => {
   if (!center || !Array.isArray(center) || center.length !== 2) {
     return [];
   }

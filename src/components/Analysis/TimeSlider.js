@@ -13,8 +13,38 @@ export const TimeSlider = () => {
     formatTimeFromDecimal,
     handleTimeChange,
     shouldUpdateCamera,
-    setShouldUpdateCamera
+    setShouldUpdateCamera,
+    date
   } = useSunlight();
+  
+  // Format date as "Month Day, Year" (e.g., "June 15, 2023")
+  // or "Today", "Yesterday", "Tomorrow" when appropriate
+  const formatDate = (dateObj) => {
+    if (!dateObj) return '';
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dateToCheck = new Date(dateObj);
+    dateToCheck.setHours(0, 0, 0, 0);
+    
+    if (dateToCheck.getTime() === today.getTime()) {
+      return 'Today';
+    } else if (dateToCheck.getTime() === yesterday.getTime()) {
+      return 'Yesterday';
+    } else if (dateToCheck.getTime() === tomorrow.getTime()) {
+      return 'Tomorrow';
+    } else {
+      const options = { month: 'long', day: 'numeric', year: 'numeric' };
+      return dateObj.toLocaleDateString('en-US', options);
+    }
+  };
   
   // Function to handle slider value change
   const onSliderValueChange = (value) => {
@@ -47,7 +77,9 @@ export const TimeSlider = () => {
   return (
     <View style={styles.enhancedSliderContainer}>
       <View style={styles.timeHeaderContainer}>
-        <Text style={styles.timeHeaderText}>Time of Day</Text>
+        <View style={styles.timeHeaderTextContainer}>
+          <Text style={styles.timeHeaderText}>{formatDate(date)}</Text>
+        </View>
         <TouchableOpacity 
           style={styles.followSunButton}
           onPress={handleFollowSun}
@@ -94,9 +126,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  timeHeaderTextContainer: {
+    flex: 1,
+  },
   timeHeaderText: {
     ...Typography.subtitle,
-    flex: 1,
+  },
+  dateText: {
+    ...Typography.caption,
+    color: Colors.gray,
+    marginTop: 2,
   },
   currentTimeText: {
     ...Typography.subtitle,

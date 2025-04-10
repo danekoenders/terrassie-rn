@@ -30,7 +30,6 @@ const MapScreen = ({ initialLocation }) => {
   const [isManuallyNavigating, setIsManuallyNavigating] = useState(false);
   // Use refs for values that shouldn't trigger re-renders
   const selectedPointRef = useRef(null);
-  const [showZoomMessage, setShowZoomMessage] = useState(false);
 
   // Fallback to Amsterdam coordinates if location is not available
   const effectiveLocation = location || [4.9041, 52.3676];
@@ -202,15 +201,6 @@ const MapScreen = ({ initialLocation }) => {
       // Use just the zoom threshold of 18 for analysis mode
       const isHighZoom = zoom >= 18;
       const newShowCenterPointer = isHighZoom;
-      
-      // If we just crossed the threshold, show zoom message
-      if (newShowCenterPointer && !showCenterPointer && !isAnalysisMode) {
-        setShowZoomMessage(true);
-        // Hide the message after 3 seconds
-        setTimeout(() => {
-          setShowZoomMessage(false);
-        }, 3000);
-      }
       
       // Force update if different
       if (newShowCenterPointer !== showCenterPointer) {
@@ -438,7 +428,7 @@ const MapScreen = ({ initialLocation }) => {
         <MapboxGL.MapView
           ref={mapRef}
           style={styles.map}
-          styleURL="mapbox://styles/danekoenders/cm8824x5800b901qr2tt8e6pz"
+          styleURL="mapbox://styles/danekoenders/cm9b9z6vk003401r3as94c641"
           onMapIdle={onCenterChanged}
           onCameraChanged={onCenterChanged}
           logoEnabled={false}
@@ -490,7 +480,6 @@ const MapScreen = ({ initialLocation }) => {
             puckBearingEnabled={true}
             pulsing={{
               isEnabled: true,
-              color: "rgba(255, 207, 48, 0.8)",
               radius: 'accuracy'
             }}
           />
@@ -542,7 +531,7 @@ const MapScreen = ({ initialLocation }) => {
               <MapboxGL.FillExtrusionLayer
                 id="raySegmentsLayer"
                 style={{
-                  fillExtrusionColor: "rgba(255,0,0,0.7)",
+                  fillExtrusionColor: Colors.shadow,
                   fillExtrusionOpacity: 0.7,
                   fillExtrusionBase: ["get", "base"],
                   fillExtrusionHeight: ["get", "height"],
@@ -643,15 +632,6 @@ const MapScreen = ({ initialLocation }) => {
           </View>
         )}
 
-        {/* Zoom level message */}
-        {showZoomMessage && (
-          <View style={styles.zoomMessageContainer}>
-            <Text style={styles.zoomMessageText}>
-              You can now check sunlight at this location!
-            </Text>
-          </View>
-        )}
-
         {/* UI Overlays */}
         {/* Top search bar and location button */}
         {!isAnalysisMode && (
@@ -697,7 +677,7 @@ const MapScreen = ({ initialLocation }) => {
                 isInShadow ? styles.shadowPin : styles.sunPin,
               ]}
             >
-              <Text style={styles.pinIcon}>{isInShadow ? "🌥️" : "☀️"}</Text>
+              <Text style={styles.pinIcon}>{isInShadow ? "☁️" : "☀️"}</Text>
             </View>
           </View>
         )}
@@ -719,7 +699,7 @@ const MapScreen = ({ initialLocation }) => {
               <View style={styles.panelHandle} />
               {showCenterPointer || currentZoom >= 18 ? (
                 <Text style={styles.panelText}>
-                  Place the pin over a terrace and tap "Check Sunlight"
+                  Move closer to a terrace and tap "Check Sunlight"
                 </Text>
               ) : (
                 <Text style={styles.panelText}>
@@ -818,24 +798,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: Colors.gray,
-  },
-  zoomMessageContainer: {
-    position: 'absolute',
-    top: 120,
-    left: 16,
-    right: 16,
-    backgroundColor: Colors.primary,
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.medium,
-  },
-  zoomMessageText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   buildingsToggleButton: {
     position: 'absolute',

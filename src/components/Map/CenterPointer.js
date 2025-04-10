@@ -7,7 +7,7 @@ const CenterPointer = () => {
     <View style={styles.centerPointerContainer}>
       <Text style={styles.centerPointerIcon}>📍</Text>
       <View style={styles.centerPointerTextContainer}>
-        <Text style={styles.centerPointerText}>Position the pin and check sunlight</Text>
+        <Text style={styles.centerPointerText}>Move to a terrace</Text>
       </View>
     </View>
   );
@@ -19,7 +19,7 @@ const styles = StyleSheet.create({
     top: '50%',
     left: '50%',
     transform: [
-      { translateX: -10 },
+      { translateX: -70 },
       { translateY: -40 }
     ],
     alignItems: 'center',
