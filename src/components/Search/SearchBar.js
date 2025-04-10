@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { StyleSheet, View, TextInput, TouchableOpacity, Text, ActivityIndicator, Keyboard } from 'react-native';
 import { searchMapboxLocations } from '../../utils/mapUtils';
 import { Colors, Shadows, Buttons } from '../../styles/common';
 
-export const SearchBar = ({ onUpdateResults, onFlyToUserLocation }) => {
+export const SearchBar = ({ onUpdateResults, onFlyToUserLocation, userLocation, onFocus }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const searchInputRef = useRef(null);
   
   // Search for locations using Mapbox API
   const searchLocation = async (query) => {
@@ -17,7 +19,8 @@ export const SearchBar = ({ onUpdateResults, onFlyToUserLocation }) => {
     setIsSearching(true);
     
     try {
-      const results = await searchMapboxLocations(query);
+      // Pass userLocation to searchMapboxLocations for proximity-based results
+      const results = await searchMapboxLocations(query, userLocation);
       onUpdateResults(results);
     } catch (error) {
       console.error("Error searching for location:", error);
@@ -38,19 +41,46 @@ export const SearchBar = ({ onUpdateResults, onFlyToUserLocation }) => {
       onUpdateResults([]);
     }
   };
+
+  // Method to clear search and dismiss keyboard
+  const clearSearch = () => {
+    setSearchQuery('');
+    onUpdateResults([]);
+    Keyboard.dismiss();
+    if (searchInputRef.current) {
+      searchInputRef.current.blur();
+    }
+    setIsFocused(false);
+  };
+
+  // Handle focus of search input
+  const handleFocus = () => {
+    setIsFocused(true);
+    if (onFocus) {
+      onFocus();
+    }
+  };
   
   return (
     <View style={styles.searchBarContainer}>
-      <View style={styles.searchInputContainer}>
+      <View style={[styles.searchInputContainer, isFocused]}>
         <TouchableOpacity>
           <Text style={styles.searchIcon}>🔍</Text>
         </TouchableOpacity>
         <TextInput
+          ref={searchInputRef}
           style={styles.searchInput}
           placeholder="Search for a location..."
           value={searchQuery}
           onChangeText={handleSearchChange}
+          onFocus={handleFocus}
+          returnKeyType="search"
         />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={clearSearch}>
+            <Text style={styles.clearIcon}>✕</Text>
+          </TouchableOpacity>
+        )}
         {isSearching && (
           <ActivityIndicator size="small" color="#666" />
         )}
@@ -58,7 +88,10 @@ export const SearchBar = ({ onUpdateResults, onFlyToUserLocation }) => {
       
       <TouchableOpacity 
         style={styles.locationButton}
-        onPress={onFlyToUserLocation}
+        onPress={() => {
+          clearSearch();
+          onFlyToUserLocation();
+        }}
       >
         <Text style={styles.locationIcon}>📍</Text>
       </TouchableOpacity>
@@ -89,6 +122,11 @@ const styles = StyleSheet.create({
   searchIcon: {
     fontSize: 16,
     marginHorizontal: 8,
+  },
+  clearIcon: {
+    fontSize: 16,
+    marginHorizontal: 8,
+    color: Colors.gray,
   },
   locationButton: {
     ...Buttons.icon,

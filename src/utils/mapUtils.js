@@ -4,30 +4,154 @@ import * as turf from '@turf/turf';
 // Store the access token directly
 const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoiZGFuZWtvZW5kZXJzIiwiYSI6ImNtODdvNzczZDA4dmcybHF1cnltZmVkbTQifQ.aiCVa0540JxdEivA-rlDTQ';
 
+// Debounce variables to manage request rate
+let searchTimeout = null;
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 300; // Minimum time between requests in ms
+
 /**
- * Search for locations using Mapbox Geocoding API
+ * Search for locations using Mapbox Search Box API
+ * This API prioritizes POIs (restaurants, cafes, etc.) over general place names
  * 
  * @param {string} query - Search query text
+ * @param {Array} userLocation - [longitude, latitude] coordinates for proximity-based results
  * @returns {Promise<Array>} Promise resolving to array of place features
  */
-export const searchMapboxLocations = async (query) => {
-  if (!query || query.length < 3) {
+export const searchMapboxLocations = async (query, userLocation) => {
+  if (!query || query.length < 2) {
     return [];
   }
   
-  try {
-    const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=5`;
-    const response = await fetch(endpoint);
-    const data = await response.json();
-    
-    if (data.features) {
-      return data.features;
-    }
-    return [];
-  } catch (error) {
-    console.error("Error searching for location:", error);
-    return [];
+  // Clear any existing timeout
+  if (searchTimeout) {
+    clearTimeout(searchTimeout);
   }
+  
+  // Return a promise that will resolve after debounce
+  return new Promise((resolve) => {
+    // Set a new timeout
+    searchTimeout = setTimeout(async () => {
+      // Check if we should throttle the request
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTime;
+      
+      if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+        // Wait a bit longer if requests are coming too fast
+        const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+        await new Promise(r => setTimeout(r, waitTime));
+      }
+      
+      // Update the last request time
+      lastRequestTime = Date.now();
+      
+      try {
+        // Use the suggest endpoint for better autocomplete functionality
+        let endpoint = `https://api.mapbox.com/search/searchbox/v1/suggest?`;
+        
+        // Add query parameter
+        endpoint += `q=${encodeURIComponent(query)}`;
+        
+        // Add access token
+        endpoint += `&access_token=${MAPBOX_ACCESS_TOKEN}`;
+        
+        // Set session token for consistent results
+        const sessionToken = Math.random().toString(36).substring(2, 15);
+        endpoint += `&session_token=${sessionToken}`;
+        
+        // Set limits
+        endpoint += `&limit=10`;
+        
+        // Set country bias to Netherlands for better local results
+        endpoint += `&country=NL`;
+        
+        // Types parameter that prioritizes POIs - this gives higher priority to
+        // cafes, restaurants, and other POIs over general place names
+        // Using valid types according to the documentation
+        endpoint += `&types=poi,address,street,neighborhood,place,district,postcode,locality,region`;
+        
+        // Filter to just show food and drinks POIs with higher priority
+        endpoint += `&poi_category=food_and_drink`;
+        
+        // Language parameter
+        endpoint += `&language=nl,en`;
+        
+        // Include proximity parameter for nearby locations
+        if (userLocation && Array.isArray(userLocation) && userLocation.length === 2) {
+          endpoint += `&proximity=${userLocation[0]},${userLocation[1]}`;
+          // Note: proximity_bias parameter is not supported by the API
+        }
+        
+        // Make the suggest request
+        const response = await fetch(endpoint);
+        const data = await response.json();
+
+        console.log("Search results:", data);
+        
+        // Check for rate limiting
+        if (data.message === "Too Many Requests") {
+          console.warn("Rate limited by Mapbox API, waiting before retrying");
+          // Wait and retry once after rate limit
+          await new Promise(r => setTimeout(r, 1000));
+          resolve([]);
+          return;
+        }
+        
+        // Check for errors in the response
+        if (data.error) {
+          console.error("API Error:", data.error);
+          resolve([]);
+          return;
+        }
+        
+        if (!data.suggestions || data.suggestions.length === 0) {
+          resolve([]);
+          return;
+        }
+        
+        // Get the top suggestions
+        const suggestions = data.suggestions;
+        
+        // For each suggestion, get the details using the retrieve endpoint
+        const detailsPromises = suggestions.map(async (suggestion) => {
+          const retrieveEndpoint = `https://api.mapbox.com/search/searchbox/v1/retrieve/${suggestion.mapbox_id}?session_token=${sessionToken}&access_token=${MAPBOX_ACCESS_TOKEN}`;
+          
+          try {
+            const detailsResponse = await fetch(retrieveEndpoint);
+            const detailsData = await detailsResponse.json();
+            
+            if (!detailsData.features || !detailsData.features[0]) {
+              return null;
+            }
+            
+            const feature = detailsData.features[0];
+            
+            // Format the result to match what our app expects
+            return {
+              ...feature,
+              text: feature.properties?.name || feature.properties?.full_address || "Unnamed Location",
+              place_name: feature.properties?.full_address || 
+                         `${feature.properties?.name || ''}, ${feature.properties?.place_formatted || ''}`,
+              id: feature.id || suggestion.mapbox_id,
+              center: feature.geometry?.coordinates || feature.center || [0, 0],
+              // Add original suggestion for reference
+              suggestion: suggestion
+            };
+          } catch (error) {
+            return null;
+          }
+        });
+        
+        // Wait for all detail requests to complete
+        const results = await Promise.all(detailsPromises);
+        
+        // Filter out null results and return
+        resolve(results.filter(result => result !== null));
+      } catch (error) {
+        console.error("Error searching for location:", error);
+        resolve([]);
+      }
+    }, 300); // Wait 300ms before making the request
+  });
 };
 
 /**

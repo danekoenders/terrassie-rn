@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { StyleSheet, View, SafeAreaView, Text, ActivityIndicator, TouchableOpacity } from "react-native";
+import { StyleSheet, View, SafeAreaView, Text, ActivityIndicator, TouchableOpacity, TouchableWithoutFeedback, Keyboard } from "react-native";
 import MapboxGL from "@rnmapbox/maps";
 import { useSunlight } from "../../context/SunlightContext";
 import { Colors, Shadows } from "../../styles/common";
@@ -30,6 +30,9 @@ const MapScreen = ({ initialLocation }) => {
   const [isManuallyNavigating, setIsManuallyNavigating] = useState(false);
   // Use refs for values that shouldn't trigger re-renders
   const selectedPointRef = useRef(null);
+
+  // Add state to track if search is focused
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   // Fallback to Amsterdam coordinates if location is not available
   const effectiveLocation = location || [4.9041, 52.3676];
@@ -169,6 +172,13 @@ const MapScreen = ({ initialLocation }) => {
     if (!mapRef.current || !isMapReady) return;
 
     try {
+      // Dismiss keyboard and search results when user moves map
+      if (isSearchFocused || showSearchResults) {
+        Keyboard.dismiss();
+        setShowSearchResults(false);
+        setIsSearchFocused(false);
+      }
+
       const center = await mapRef.current.getCenter();
       const zoom = await mapRef.current.getZoom();
       
@@ -209,7 +219,7 @@ const MapScreen = ({ initialLocation }) => {
     } catch (error) {
       // Critical error handling
     }
-  }, [isMapReady, isCameraSystemMove, isAnalysisMode, setSelectedPoint, exitSunlightAnalysis, showCenterPointer]);
+  }, [isMapReady, isCameraSystemMove, isAnalysisMode, setSelectedPoint, exitSunlightAnalysis, showCenterPointer, isSearchFocused, showSearchResults]);
 
   // Fly to any location with animation
   const flyToLocation = useCallback(async (coords) => {
@@ -285,9 +295,25 @@ const MapScreen = ({ initialLocation }) => {
 
   // Handle selecting a place from search results
   const handleSelectPlace = useCallback((place) => {
-    if (!place || !place.geometry || !place.geometry.coordinates) return;
+    if (!place) return;
 
-    const [longitude, latitude] = place.geometry.coordinates;
+    // Extract coordinates from the place object
+    let coordinates = null;
+    
+    // Try different possible coordinate locations in the result
+    if (place.geometry && place.geometry.coordinates) {
+      coordinates = place.geometry.coordinates;
+    } else if (place.center) {
+      coordinates = place.center;
+    } else if (place.properties && place.properties.coordinates) {
+      coordinates = place.properties.coordinates;
+    }
+    
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 2) {
+      return;
+    }
+
+    const [longitude, latitude] = coordinates;
     const newLocation = [longitude, latitude];
 
     // Update selected point
@@ -422,6 +448,20 @@ const MapScreen = ({ initialLocation }) => {
     setShowBuildingPoints(!showBuildingPoints);
   }, [showBuildingPoints, setShowBuildingPoints]);
 
+  // Handle search focus
+  const handleSearchFocus = useCallback(() => {
+    setIsSearchFocused(true);
+  }, []);
+
+  // Handle tap on map to dismiss search
+  const handleMapPress = useCallback(() => {
+    if (isSearchFocused || showSearchResults) {
+      Keyboard.dismiss();
+      setShowSearchResults(false);
+      setIsSearchFocused(false);
+    }
+  }, [isSearchFocused, showSearchResults]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.container}>
@@ -438,6 +478,7 @@ const MapScreen = ({ initialLocation }) => {
             setMapLoading(false);
             // Handle error if needed
           }}
+          onPress={handleMapPress}
         >
           <MapboxGL.Camera 
             key={`camera-${cameraKey}`}
@@ -639,13 +680,23 @@ const MapScreen = ({ initialLocation }) => {
             <SearchBar
               onUpdateResults={updateSearchResults}
               onFlyToUserLocation={handleLocationButtonPress}
+              userLocation={userLocation}
+              onFocus={handleSearchFocus}
             />
 
             {showSearchResults && (
-              <SearchResults
-                results={searchResults}
-                onSelectPlace={handleSelectPlace}
-              />
+              <TouchableWithoutFeedback onPress={(event) => event.stopPropagation()}>
+                <View>
+                  <SearchResults
+                    results={searchResults}
+                    onSelectPlace={(place) => {
+                      handleSelectPlace(place);
+                      Keyboard.dismiss();
+                      setIsSearchFocused(false);
+                    }}
+                  />
+                </View>
+              </TouchableWithoutFeedback>
             )}
           </View>
         )}
