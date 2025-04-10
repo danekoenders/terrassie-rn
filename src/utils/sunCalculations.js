@@ -201,6 +201,66 @@ export const createRay3DSegments = (start, end, startElevation, endElevation, se
 };
 
 /**
+ * Create a sun position indicator showing the sun's azimuth direction
+ * 
+ * @param {Array} selectedPoint - [longitude, latitude] coordinates
+ * @param {number} bearing - Sun bearing from north in degrees
+ * @returns {Object} Feature representing the sun azimuth line
+ */
+export const createSunPositionIndicator = (selectedPoint, bearing) => {
+  // Create a line in the direction of the sun's azimuth
+  const distance = 0.1; // 100m line
+  const endPoint = turf.destination(
+    selectedPoint,
+    distance,
+    bearing,
+    { units: "kilometers" }
+  );
+  
+  return {
+    type: "Feature",
+    properties: {
+      isSunPositionIndicator: true
+    },
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        selectedPoint,
+        endPoint.geometry.coordinates
+      ]
+    }
+  };
+};
+
+/**
+ * Create a direct ray toward the sun using both azimuth and altitude
+ * 
+ * @param {Array} selectedPoint - [longitude, latitude] coordinates
+ * @param {number} bearing - Sun bearing from north in degrees
+ * @param {number} sunAltitudeDeg - Sun altitude in degrees
+ * @returns {Array} Features representing the direct ray to the sun
+ */
+export const createDirectSunRay = (selectedPoint, bearing, sunAltitudeDeg) => {
+  // Calculate the end point using both azimuth and altitude
+  const rayDistance = 0.2; // 200m
+  const rayEnd = calculate3DDestinationPoint(
+    selectedPoint,
+    rayDistance,
+    bearing,
+    sunAltitudeDeg
+  );
+  
+  // Create 3D ray segments for the direct sun ray
+  return createRay3DSegments(
+    selectedPoint,
+    rayEnd.position,
+    0,
+    rayEnd.elevation,
+    180 // Fewer segments for this ray
+  );
+};
+
+/**
  * Enhanced 3D ray tracing for determining if a point is in shadow
  * Uses SunCalc data and Mapbox building height information
  * 
@@ -219,9 +279,14 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       isInShadow: true,
       blockerFeature: null,
       intersectionPoint: null,
-      raySegments: null
+      raySegments: null,
+      sunPositionIndicator: null,
+      directSunRay: null
     };
   }
+  
+  // Create the sun position indicator (always available when sun is above horizon)
+  const sunPositionIndicator = createSunPositionIndicator(selectedPoint, bearing);
   
   // No buildings to check
   if (!features || features.length === 0) {
@@ -240,13 +305,18 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       0,
       rayEnd.elevation
     );
+    
+    // Create direct sun ray
+    const directSunRay = createDirectSunRay(selectedPoint, bearing, sunAltitudeDeg);
 
     return {
       isInShadow: false,
       blockerFeature: null,
       intersectionPoint: null,
       raySegments,
-      rayEnd: rayEnd.position
+      rayEnd: rayEnd.position,
+      sunPositionIndicator,
+      directSunRay
     };
   }
 
@@ -400,6 +470,9 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
   
   // Create ray segments based on intersection results
   let raySegments;
+  // Create direct sun ray (if not in shadow)
+  let directSunRay = null;
+  
   if (inShadow && closestIntersection) {
     // If in shadow, create ray segments that stop at the building
     raySegments = createRay3DSegments(
@@ -408,6 +481,7 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       0,
       intersectionHeight
     );
+    // No direct sun ray when in shadow
   } else {
     // If not in shadow, create full ray segments
     raySegments = createRay3DSegments(
@@ -416,6 +490,9 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
       0,
       rayEnd.elevation
     );
+    
+    // Also create a direct sun ray for visualization
+    directSunRay = createDirectSunRay(selectedPoint, bearing, sunAltitudeDeg);
   }
 
   return {
@@ -423,7 +500,9 @@ export const checkShadowWith3DRay = (selectedPoint, bearing, sunAltitudeDeg, fea
     blockerFeature: blocker,
     intersectionPoint: closestIntersection,
     raySegments,
-    rayEnd: inShadow ? closestIntersection : rayEnd.position
+    rayEnd: inShadow ? closestIntersection : rayEnd.position,
+    sunPositionIndicator,
+    directSunRay
   };
 };
 

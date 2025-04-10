@@ -149,7 +149,7 @@ const MapScreen = ({ initialLocation }) => {
   }, [memoizedEffectiveLocation, isMapReady, isManuallyNavigating, setSelectedPoint]);
 
   // Use a fixed max zoom level since getMaxZoomLevel is not available
-  const MAX_ZOOM = 19;
+  const MAX_ZOOM = 18;
 
   // Add state for current zoom level to directly reference in rendering
   const [currentZoom, setCurrentZoom] = useState(12);
@@ -199,8 +199,8 @@ const MapScreen = ({ initialLocation }) => {
       }
 
       // Determine if we should show the center pointer
-      // Use just the zoom threshold of 19 for analysis mode
-      const isHighZoom = zoom >= 19;
+      // Use just the zoom threshold of 18 for analysis mode
+      const isHighZoom = zoom >= 18;
       const newShowCenterPointer = isHighZoom;
       
       // If we just crossed the threshold, show zoom message
@@ -243,8 +243,8 @@ const MapScreen = ({ initialLocation }) => {
         ...prev,
         centerCoordinate: targetCoords,
         animationDuration: 1000,
-        // Set zoom to at least 19 to help users get to the analysis UI faster
-        zoomLevel: Math.max(currentZoom, 19),
+        // Set zoom to at least 18 to help users get to the analysis UI faster
+        zoomLevel: Math.max(currentZoom, 18),
         animationMode: 'flyTo',
       }));
       
@@ -551,6 +551,50 @@ const MapScreen = ({ initialLocation }) => {
             </MapboxGL.ShapeSource>
           )}
 
+          {/* Sun Position Indicator - Only shown when in sunlight */}
+          {isAnalysisMode && !isInShadow && (
+            <>
+              {/* Sun position azimuth line */}
+              <MapboxGL.ShapeSource
+                id="sunPositionSource"
+                shape={useSunlight().sunPositionIndicator || {
+                  type: "FeatureCollection",
+                  features: []
+                }}
+              >
+                <MapboxGL.LineLayer
+                  id="sunPositionLine"
+                  style={{
+                    lineColor: "rgba(255,215,0,0.8)",
+                    lineWidth: 3,
+                    lineDasharray: [2, 2]
+                  }}
+                />
+              </MapboxGL.ShapeSource>
+
+              {/* Direct ray to sun (3D visualization) */}
+              {useSunlight().directSunRay && useSunlight().directSunRay.length > 0 && (
+                <MapboxGL.ShapeSource
+                  id="directSunRaySource"
+                  shape={{
+                    type: "FeatureCollection",
+                    features: useSunlight().directSunRay,
+                  }}
+                >
+                  <MapboxGL.FillExtrusionLayer
+                    id="directSunRayLayer"
+                    style={{
+                      fillExtrusionColor: "rgba(255,215,0,0.8)",
+                      fillExtrusionOpacity: 0.8,
+                      fillExtrusionBase: ["get", "base"],
+                      fillExtrusionHeight: ["get", "height"],
+                    }}
+                  />
+                </MapboxGL.ShapeSource>
+              )}
+            </>
+          )}
+
           {/* Intersection point marker */}
           {intersectionPoint && (
             <MapboxGL.ShapeSource
@@ -659,7 +703,7 @@ const MapScreen = ({ initialLocation }) => {
         )}
 
         {/* Check Sunlight button */}
-        {(showCenterPointer || currentZoom >= 19 ) && !isAnalysisMode && (
+        {(showCenterPointer || currentZoom >= 18 ) && !isAnalysisMode && (
           <CheckSunlightButton onCheckSunlight={handleCheckSunlight} />
         )}
 
@@ -673,7 +717,7 @@ const MapScreen = ({ initialLocation }) => {
           ) : (
             <View style={styles.minimalPanel}>
               <View style={styles.panelHandle} />
-              {showCenterPointer || currentZoom >= 19 ? (
+              {showCenterPointer || currentZoom >= 18 ? (
                 <Text style={styles.panelText}>
                   Place the pin over a terrace and tap "Check Sunlight"
                 </Text>

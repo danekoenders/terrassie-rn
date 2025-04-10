@@ -44,6 +44,10 @@ export const SunlightProvider = ({ children }) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [isAnalysisMode, setIsAnalysisMode] = useState(false);
   
+  // Add state for sun position visualization
+  const [sunPositionIndicator, setSunPositionIndicator] = useState(null);
+  const [directSunRay, setDirectSunRay] = useState(null);
+  
   // Add state to cache building features
   const [cachedBuildings, setCachedBuildings] = useState(null);
   const [cachedBuildingPoint, setCachedBuildingPoint] = useState(null);
@@ -161,6 +165,8 @@ export const SunlightProvider = ({ children }) => {
     setBlockerFeature(shadowResult.blockerFeature);
     setIntersectionPoint(shadowResult.intersectionPoint);
     setRaySegments(shadowResult.raySegments);
+    setSunPositionIndicator(shadowResult.sunPositionIndicator);
+    setDirectSunRay(shadowResult.directSunRay);
   };
   
   /**
@@ -264,6 +270,8 @@ export const SunlightProvider = ({ children }) => {
       setBlockerFeature(shadowResult.blockerFeature);
       setIntersectionPoint(shadowResult.intersectionPoint);
       setRaySegments(shadowResult.raySegments);
+      setSunPositionIndicator(shadowResult.sunPositionIndicator);
+      setDirectSunRay(shadowResult.directSunRay);
       
     } catch (error) {
       console.error("Error in shadow analysis:", error);
@@ -290,6 +298,8 @@ export const SunlightProvider = ({ children }) => {
           setIsInShadow(false);
           setBlockerFeature(null);
           setIntersectionPoint(null);
+          setSunPositionIndicator(null);
+          setDirectSunRay(null);
         } else {
           // Night time - no rays
           setRaySegments(null);
@@ -297,6 +307,8 @@ export const SunlightProvider = ({ children }) => {
           setIsInShadow(true);
           setBlockerFeature(null);
           setIntersectionPoint(null);
+          setSunPositionIndicator(null);
+          setDirectSunRay(null);
         }
       } catch (fallbackError) {
         // Set safe default values in case of error
@@ -305,6 +317,8 @@ export const SunlightProvider = ({ children }) => {
         setIntersectionPoint(null);
         setRaySegments(null);
         setRayCoords(null);
+        setSunPositionIndicator(null);
+        setDirectSunRay(null);
       }
     } finally {
       if (!skipAnalyzing) {
@@ -381,6 +395,8 @@ export const SunlightProvider = ({ children }) => {
     setRayCoords(null);
     setBlockerFeature(null);
     setIntersectionPoint(null);
+    setSunPositionIndicator(null);
+    setDirectSunRay(null);
     
     // Reset to current time
     const now = new Date();
@@ -423,6 +439,10 @@ export const SunlightProvider = ({ children }) => {
     isAnalysisMode,
     shouldUpdateCamera,
     setShouldUpdateCamera,
+    
+    // Sun visualization
+    sunPositionIndicator,
+    directSunRay,
     
     // Building data
     cachedBuildings,
