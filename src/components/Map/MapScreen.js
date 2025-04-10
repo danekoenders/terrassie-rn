@@ -473,6 +473,7 @@ const MapScreen = ({ initialLocation }) => {
           onCameraChanged={onCenterChanged}
           logoEnabled={false}
           pitchEnabled={true}
+          scaleBarEnabled={false}
           onDidFinishLoadingMap={onMapReady}
           onMapLoadingError={(error) => {
             setMapLoading(false);
@@ -775,7 +776,7 @@ const styles = StyleSheet.create({
   },
   topContainer: {
     position: "absolute",
-    top: 40,
+    top: 20,
     left: 16,
     right: 16,
     zIndex: 10,

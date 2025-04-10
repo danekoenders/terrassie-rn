@@ -80,12 +80,6 @@ export const TimeSlider = () => {
         <View style={styles.timeHeaderTextContainer}>
           <Text style={styles.timeHeaderText}>{formatDate(date)}</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.followSunButton}
-          onPress={handleFollowSun}
-        >
-          <Text style={styles.followSunButtonText}>Follow Sun</Text>
-        </TouchableOpacity>
         <Text style={styles.currentTimeText}>{exactTimeString}</Text>
       </View>
       
