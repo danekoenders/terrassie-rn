@@ -84,8 +84,6 @@ export const searchMapboxLocations = async (query, userLocation) => {
         // Make the suggest request
         const response = await fetch(endpoint);
         const data = await response.json();
-
-        console.log("Search results:", data);
         
         // Check for rate limiting
         if (data.message === "Too Many Requests") {

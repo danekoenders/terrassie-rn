@@ -214,7 +214,6 @@ export const SunlightProvider = ({ children }) => {
         const buildingVisualizations = [];
         
         if (buildingFeatures && buildingFeatures.length > 0) {
-          console.log(buildingFeatures);
           buildingFeatures.forEach((feature, index) => {
             try {
               if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
