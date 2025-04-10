@@ -130,6 +130,8 @@ const styles = StyleSheet.create({
   },
   locationButton: {
     ...Buttons.icon,
+    width: 56,  
+    height: 56,
   },
   locationIcon: {
     fontSize: 20,
